@@ -61,6 +61,10 @@ final class FakeService: ChironService {
     var requests: [(text: String, state: [String: Any], png: Data?)] = []
     var onRequestChange: (String, [String: Any], Data?) throws -> ChangeRequest = { _, _, _ in throw URLError(.cannotConnectToHost) }
     var onChangeRequests: () throws -> [ChangeRequest] = { [] }
+    var answers: [(id: String, answer: String)] = []
+    var onAnswerRequest: (String, String) throws -> ChangeRequest = { id, _ in
+        ChangeRequest(id: id, text: "", status: "queued", createdAt: "", log: [], last: nil, summary: nil, reason: nil, commit: nil, build: nil)
+    }
     var onPutDocumentInk: (Int, String, Int) throws -> PageInkPut = { _, ink, base in .stored(PageInk(version: base + 1, inkB64: ink)) }
     var inkPuts: [(page: Int, inkB64: String, base: Int)] = []
 
@@ -170,6 +174,11 @@ final class FakeService: ChironService {
         return try onRequestChange(text, state, screenshotPNG)
     }
     func changeRequests() async throws -> [ChangeRequest] { try onChangeRequests() }
+    func answerRequest(id: String, answer: String) async throws -> ChangeRequest {
+        let r = try onAnswerRequest(id, answer)
+        answers.append((id, answer))
+        return r
+    }
     func putDocumentInk(id: String, page: Int, inkB64: String, baseVersion: Int) async throws -> PageInkPut {
         inkPuts.append((page, inkB64, baseVersion)); return try onPutDocumentInk(page, inkB64, baseVersion)
     }

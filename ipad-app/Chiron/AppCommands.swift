@@ -218,7 +218,15 @@ enum AppCommands {
             library.requestsShown = args["open"] as? Bool ?? true
         case "requests":
             await library.refreshRequests()
-            return ["requests": library.requests.map { ["id": $0.id, "status": $0.status, "last": $0.last ?? "", "summary": $0.summary ?? ""] }]
+            return ["requests": library.requests.map { ["id": $0.id, "status": $0.status, "last": $0.last ?? "", "summary": $0.summary ?? "", "question": $0.question ?? ""] }]
+        case "requests/answer":
+            // The answer to what the agent asked, as the card sends it.
+            guard let id = args["id"] as? String, let answer = args["answer"] as? String else {
+                throw Failure.badArguments("requests/answer needs id and answer")
+            }
+            guard await library.answerRequest(id, answer) else {
+                throw Failure.badArguments(library.requestError ?? "the answer was not taken")
+            }
         case "capture/close":
             library.pendingCapture = nil
             library.captureAnswer = nil
@@ -400,6 +408,7 @@ enum AppCommands {
             "capture_card": library.pendingCapture != nil,
             "build_offered": library.availableBuild?.label ?? "",
             "requests_card": library.requestsShown,
+            "requests_waiting": library.waitingOnReader,
             "settings_card": library.settingsShown,
             "capture_answer": library.captureAnswer ?? "",
             "shelf_rows": library.subjects.map { ["id": $0.id, "kind": $0.kind ?? "book", "status": $0.status ?? "", "scale": $0.scale ?? "", "progress": $0.progress ?? "", "shelf": $0.shelf ?? "", "unread": $0.unread ?? 0, "updated": $0.updatedAt ?? ""] },

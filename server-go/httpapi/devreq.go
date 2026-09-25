@@ -3,8 +3,11 @@ package httpapi
 import (
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"path/filepath"
+
+	"github.com/mjbraun/chiron/server/devreq"
 )
 
 // "Request a change" (SPRITE-DEV-PLAN.md phase G): the app posts what it
@@ -65,4 +68,28 @@ func (s *Server) handleRequestGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, req)
+}
+
+// POST /dev/requests/{id}/answer: Matt's answer to what the agent asked.
+func (s *Server) handleRequestAnswer(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Answer string `json:"answer"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&in); err != nil {
+		writeError(w, http.StatusBadRequest, "bad request body: %v", err)
+		return
+	}
+	req, err := s.requests.Answer(r.PathValue("id"), in.Answer)
+	switch {
+	case errors.Is(err, devreq.ErrNotFound):
+		writeError(w, http.StatusNotFound, "%v", err)
+	case errors.Is(err, devreq.ErrNotWaiting):
+		writeError(w, http.StatusConflict, "%v", err)
+	case errors.Is(err, devreq.ErrNoAnswer):
+		writeError(w, http.StatusUnprocessableEntity, "%v", err)
+	case err != nil:
+		writeError(w, http.StatusInternalServerError, "%v", err)
+	default:
+		writeJSON(w, http.StatusOK, req)
+	}
 }

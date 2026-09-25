@@ -433,6 +433,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /dev/requests", s.handleRequestCreate)
 	mux.HandleFunc("GET /dev/requests", s.handleRequestList)
 	mux.HandleFunc("GET /dev/requests/{id}", s.handleRequestGet)
+	mux.HandleFunc("POST /dev/requests/{id}/answer", s.handleRequestAnswer)
 	mux.HandleFunc("GET /builds/latest", s.handleBuildLatest)
 	mux.HandleFunc("GET /builds/{token}/{file}", s.handleBuildFile)
 	mux.HandleFunc("GET /documents/{doc}", s.handleDocumentGet)

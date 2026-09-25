@@ -52,3 +52,28 @@ func TestAChangeRequestIsQueuedAndListed(t *testing.T) {
 		t.Errorf("without the key: %d", w.Code)
 	}
 }
+
+// The app answers a request the agent stopped to ask about.
+func TestAnAnswerGoesToAWaitingRequest(t *testing.T) {
+	s := newServer(t, "sekrit")
+	s.requests = devreq.Open(t.TempDir())
+	r, _ := s.requests.Create("make the shelf nicer", nil, nil)
+
+	if w := do(t, s, "POST", "/dev/requests/"+r.ID+"/answer", `{"answer":"denser"}`, "sekrit"); w.Code != 409 {
+		t.Errorf("not waiting: %d %s", w.Code, w.Body)
+	}
+	r.Status, r.Question = devreq.Waiting, "Denser, or covers?"
+	s.requests.Save(r)
+	if w := do(t, s, "POST", "/dev/requests/"+r.ID+"/answer", `{"answer":" "}`, "sekrit"); w.Code != 422 {
+		t.Errorf("empty answer: %d %s", w.Code, w.Body)
+	}
+	w := do(t, s, "POST", "/dev/requests/"+r.ID+"/answer", `{"answer":"Denser."}`, "sekrit")
+	var got devreq.Request
+	json.Unmarshal(w.Body.Bytes(), &got)
+	if w.Code != 200 || got.Status != devreq.Queued || len(got.Thread) != 1 || got.Thread[0].Answer != "Denser." {
+		t.Errorf("answer: %d %s", w.Code, w.Body)
+	}
+	if w := do(t, s, "POST", "/dev/requests/req-nonesuch/answer", `{"answer":"x"}`, "sekrit"); w.Code != 404 {
+		t.Errorf("missing: %d", w.Code)
+	}
+}

@@ -19,8 +19,11 @@ import (
 )
 
 // The states a request moves through, in order; failed can follow any.
+// Waiting is the agent stopped to ask Matt something; his answer queues
+// the request again.
 const (
 	Queued   = "queued"
+	Waiting  = "waiting"
 	Working  = "working"
 	Testing  = "testing"
 	Building = "building"
@@ -48,7 +51,24 @@ type Request struct {
 	Commit  string   `json:"commit,omitempty"`
 	// Build is the app build the request produced, when the app changed.
 	Build *Build `json:"build,omitempty"`
+	// Question is what the agent is waiting on Matt for; Thread is every
+	// question it asked before and the answer it got.
+	Question string     `json:"question,omitempty"`
+	Thread   []Exchange `json:"thread,omitempty"`
 }
+
+// Exchange is one question the agent asked and Matt's answer.
+type Exchange struct {
+	Question string    `json:"question"`
+	Answer   string    `json:"answer"`
+	At       time.Time `json:"at"`
+}
+
+var (
+	ErrNotFound   = errors.New("no such request")
+	ErrNotWaiting = errors.New("the request is not waiting on an answer")
+	ErrNoAnswer   = errors.New("an answer says something")
+)
 
 type Build struct {
 	Version string `json:"version"`
@@ -123,7 +143,7 @@ func (s *Store) Save(r *Request) error {
 func (s *Store) Get(id string) (*Request, error) {
 	data, err := os.ReadFile(s.path(id))
 	if err != nil {
-		return nil, fmt.Errorf("no request %s", id)
+		return nil, fmt.Errorf("%w: %s", ErrNotFound, id)
 	}
 	var r Request
 	if err := json.Unmarshal(data, &r); err != nil {
@@ -171,4 +191,26 @@ func (s *Store) NextQueued() (*Request, error) {
 		}
 	}
 	return nil, nil
+}
+
+// Answer puts Matt's answer to the question a request is waiting on
+// onto its thread and queues it again, for the agent to take up where it
+// stopped.
+func (s *Store) Answer(id, answer string) (*Request, error) {
+	answer = strings.TrimSpace(answer)
+	r, err := s.Get(id)
+	if err != nil {
+		return nil, err
+	}
+	if r.Status != Waiting {
+		return nil, ErrNotWaiting
+	}
+	if answer == "" {
+		return nil, ErrNoAnswer
+	}
+	r.Thread = append(r.Thread, Exchange{Question: r.Question, Answer: answer, At: time.Now().UTC()})
+	r.Question = ""
+	r.Status = Queued
+	r.Say("answered: " + answer)
+	return r, s.Save(r)
 }

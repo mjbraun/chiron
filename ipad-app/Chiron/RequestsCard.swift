@@ -128,7 +128,18 @@ struct RequestRow: View {
             if let last = request.last, request.open {
                 Text(last).font(.callout).foregroundStyle(.secondary).lineLimit(3)
             }
-            if let summary = request.summary, !summary.isEmpty, !request.open {
+            if let thread = request.thread, !thread.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(Array(thread.enumerated()), id: \.offset) { _, e in
+                        Text("Asked: \(e.question)").font(.footnote).foregroundStyle(.secondary)
+                        Text("You said: \(e.answer)").font(.footnote)
+                    }
+                }
+            }
+            if request.waiting {
+                QuestionReply(request: request)
+            }
+            if let summary = request.summary, !summary.isEmpty, !request.open, !request.waiting {
                 SelectableText(text: summary, font: Typography.uiSans(15), colour: .secondaryLabel)
             }
             if let reason = request.reason, request.status == "failed" {
@@ -145,8 +156,47 @@ struct RequestRow: View {
         }
         .padding(.vertical, 4)
         // See PlanCard: a context menu here would swallow the long press
-        // that starts a selection.
-        .accessibilityElement(children: .combine)
+        // that starts a selection. A waiting row keeps its answer field
+        // reachable on its own.
+        .accessibilityElement(children: request.waiting ? .contain : .combine)
+    }
+}
+
+/// What the agent stopped to ask, and the reader's answer, which sends
+/// the request back to it.
+struct QuestionReply: View {
+    @EnvironmentObject var library: Library
+    let request: ChangeRequest
+    @State private var answer = ""
+    @State private var sending = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("The agent asks", systemImage: "questionmark.bubble")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.orange)
+            SelectableText(text: request.question ?? "", font: Typography.uiSerif(16))
+            TextField("Your answer", text: $answer, axis: .vertical)
+                .lineLimit(1...6)
+                .textFieldStyle(.roundedBorder)
+                .accessibilityLabel("Your answer")
+            HStack {
+                Spacer()
+                Button {
+                    sending = true
+                    Task {
+                        if await library.answerRequest(request.id, answer) { answer = "" }
+                        sending = false
+                    }
+                } label: {
+                    if sending { ProgressView() } else { Text("Answer") }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(sending || answer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+        .padding(10)
+        .background(Color.orange.opacity(0.08), in: .rect(cornerRadius: 10))
     }
 }
 
@@ -166,6 +216,7 @@ struct StatusPill: View {
         case "ready": return .green
         case "failed": return .red
         case "queued": return .secondary
+        case "waiting": return .orange
         default: return .blue
         }
     }
@@ -178,7 +229,21 @@ struct RequestButton: View {
         Button { library.requestsShown = true } label: {
             Label("Request a change", systemImage: "wrench.and.screwdriver")
         }
+        // A request the agent stopped on waits on the reader: the wrench
+        // says how many.
+        .overlay(alignment: .topTrailing) {
+            if library.waitingOnReader > 0 {
+                Text("\(library.waitingOnReader)")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 5)
+                    .background(Color.orange, in: .capsule)
+                    .offset(x: 8, y: -6)
+                    .allowsHitTesting(false)
+            }
+        }
         .keyboardShortcut("r", modifiers: [.command, .shift])
+        .accessibilityValue(library.waitingOnReader > 0 ? "\(library.waitingOnReader) waiting on your answer" : "")
         .accessibilityHint("Ask the agent on the sprite to change the app")
     }
 }

@@ -62,3 +62,40 @@ func ids(rs []*Request) []string {
 	}
 	return out
 }
+
+// The agent can stop and ask. The request waits with its question; an
+// answer goes on the thread and queues it again, and only a waiting
+// request takes one.
+func TestAWaitingRequestTakesAnAnswerAndQueuesAgain(t *testing.T) {
+	s := Open(t.TempDir())
+	r, _ := s.Create("make the shelf nicer", nil, nil)
+	if _, err := s.Answer(r.ID, "denser"); err == nil {
+		t.Error("a queued request asked nothing; there is nothing to answer")
+	}
+
+	r.Status = Waiting
+	r.Question = "Nicer how: denser, or with covers?"
+	s.Save(r)
+	if _, err := s.Answer(r.ID, "   "); err == nil {
+		t.Error("an empty answer is refused")
+	}
+	got, err := s.Answer(r.ID, "  Denser, one line a row. ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != Queued || got.Question != "" {
+		t.Errorf("after the answer: status %s question %q", got.Status, got.Question)
+	}
+	if len(got.Thread) != 1 || got.Thread[0].Question != "Nicer how: denser, or with covers?" || got.Thread[0].Answer != "Denser, one line a row." {
+		t.Errorf("thread = %+v", got.Thread)
+	}
+	if again, _ := s.Get(r.ID); again.Status != Queued || len(again.Thread) != 1 {
+		t.Errorf("not saved: %+v", again)
+	}
+	if next, _ := s.NextQueued(); next == nil || next.ID != r.ID {
+		t.Errorf("the answered request is next: %+v", next)
+	}
+	if _, err := s.Answer("req-nonesuch", "x"); err == nil {
+		t.Error("no such request")
+	}
+}

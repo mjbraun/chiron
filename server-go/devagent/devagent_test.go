@@ -179,3 +179,65 @@ func writeBuild(t *testing.T, served, buildJSON string) {
 		t.Fatal(err)
 	}
 }
+
+// When the agent would be guessing, it asks: its final message is the
+// question, the request waits for Matt with it, and the worktree stays
+// for when the answer comes.
+func TestAQuestionMakesTheRequestWait(t *testing.T) {
+	x := &fakeExec{answer: map[string]string{"git log": ""}, stream: []string{
+		`{"type":"result","result":"QUESTION: Nicer how: denser rows, or covers?"}`,
+	}}
+	a, store := agent(t, x)
+	r, _ := store.Create("make the shelf nicer", nil, nil)
+	a.Once()
+	got, _ := store.Get(r.ID)
+	if got.Status != devreq.Waiting || got.Question != "Nicer how: denser rows, or covers?" {
+		t.Fatalf("status %s question %q reason %q", got.Status, got.Question, got.Reason)
+	}
+	if x.did("make test") || x.did("git -C /repo worktree remove") || x.did("git -C /repo merge") {
+		t.Errorf("a question stops the run and keeps the worktree: %v", x.calls)
+	}
+	if !strings.Contains(got.Last, "Nicer how") {
+		t.Errorf("the question is the last line: %q", got.Last)
+	}
+}
+
+// An answered request goes back to the agent in the worktree it left,
+// with the questions and answers so far in its brief.
+func TestAnAnsweredRequestResumesWhereItStopped(t *testing.T) {
+	x := &fakeExec{answer: map[string]string{"git log": "abc A denser shelf\n", "git diff": "README.md\n", "git rev-parse": "abc\n"},
+		stream: []string{`{"type":"result","result":"Made the rows denser."}`}}
+	a, store := agent(t, x)
+	a.Work = t.TempDir()
+	r, _ := store.Create("make the shelf nicer", nil, nil)
+	if err := mkdirAll(a.Work + "/" + r.ID); err != nil {
+		t.Fatal(err)
+	}
+	r.Status, r.Question = devreq.Waiting, "Denser rows, or covers?"
+	store.Save(r)
+	r, _ = store.Answer(r.ID, "Denser rows.")
+
+	brief := a.prompt(r)
+	for _, want := range []string{"Denser rows, or covers?", "Denser rows.", "already"} {
+		if !strings.Contains(brief, want) {
+			t.Errorf("brief lacks %q:\n%s", want, brief)
+		}
+	}
+	a.Once()
+	got, _ := store.Get(r.ID)
+	if got.Status != devreq.Ready {
+		t.Fatalf("status %s reason %q", got.Status, got.Reason)
+	}
+	if x.did("git -C /repo worktree add") {
+		t.Errorf("the worktree it left is used again: %v", x.calls)
+	}
+}
+
+// The brief tells the agent how to ask.
+func TestTheBriefSaysHowToAsk(t *testing.T) {
+	a, store := agent(t, &fakeExec{})
+	r, _ := store.Create("make it nicer", nil, nil)
+	if p := a.prompt(r); !strings.Contains(p, "QUESTION:") {
+		t.Errorf("brief lacks the way to ask:\n%s", p)
+	}
+}

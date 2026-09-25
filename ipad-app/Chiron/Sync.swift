@@ -52,6 +52,7 @@ protocol ChironService: AnyObject {
     func latestBuild() async throws -> AppBuild
     func requestChange(text: String, state: [String: Any], screenshotPNG: Data?) async throws -> ChangeRequest
     func changeRequests() async throws -> [ChangeRequest]
+    func answerRequest(id: String, answer: String) async throws -> ChangeRequest
 }
 
 enum ServiceError: Error {
@@ -368,6 +369,10 @@ final class Sync: ObservableObject, ChironService {
 
     func changeRequests() async throws -> [ChangeRequest] {
         try await get("/dev/requests", timeout: 10)
+    }
+
+    func answerRequest(id: String, answer: String) async throws -> ChangeRequest {
+        try await post("/dev/requests/\(id)/answer", body: try JSONSerialization.data(withJSONObject: ["answer": answer]), timeout: 30)
     }
 
     func documentPosition(id: String, page: Int, position: Double) async throws {

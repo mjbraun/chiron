@@ -855,6 +855,10 @@ struct ChangeRequest: Codable, Identifiable, Equatable {
     var reason: String?
     var commit: String?
     var build: Build?
+    /// What the agent stopped to ask, while it waits on the reader; and
+    /// every question it asked before, with the answer it got.
+    var question: String? = nil
+    var thread: [Exchange]? = nil
 
     struct Build: Codable, Equatable {
         var version: String
@@ -862,11 +866,20 @@ struct ChangeRequest: Codable, Identifiable, Equatable {
         var token: String
     }
 
+    struct Exchange: Codable, Equatable {
+        var question: String
+        var answer: String
+        var at: String?
+    }
+
     enum CodingKeys: String, CodingKey {
-        case id, text, status, log, last, summary, reason, commit, build
+        case id, text, status, log, last, summary, reason, commit, build, question, thread
         case createdAt = "created_at"
     }
 
+    /// Stopped on a question for the reader.
+    var waiting: Bool { status == "waiting" }
+
     /// Still in the agent's hands.
-    var open: Bool { status != "ready" && status != "failed" }
+    var open: Bool { status != "ready" && status != "failed" && !waiting }
 }

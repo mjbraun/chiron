@@ -132,14 +132,38 @@ final class Library: ObservableObject {
     func refreshRequests() async {
         guard let list = try? await service.changeRequests() else { return }
         requests = list
-        // A request that was in the agent's hands and is out of them now.
+        // A request that was in the agent's hands and is out of them now:
+        // done, failed, or stopped on a question for the reader.
         for r in list where !r.open && openRequests.contains(r.id) {
-            notices.notify(id: "request-\(r.id)",
-                           title: r.status == "ready" ? "Your change is built" : "The change could not be made",
-                           body: r.text)
+            if r.waiting {
+                notices.notify(id: "request-\(r.id)", title: "Chiron has a question", body: r.question ?? r.text)
+            } else {
+                notices.notify(id: "request-\(r.id)",
+                               title: r.status == "ready" ? "Your change is built" : "The change could not be made",
+                               body: r.text)
+            }
         }
         openRequests = Set(list.filter(\.open).map(\.id))
         watchRequests()
+    }
+
+    /// Requests the agent stopped on, waiting for the reader's answer.
+    var waitingOnReader: Int { requests.filter(\.waiting).count }
+
+    /// The reader's answer to what the agent asked; the request goes back
+    /// to the agent. False, with requestError set, when it did not go.
+    func answerRequest(_ id: String, _ answer: String) async -> Bool {
+        let answer = answer.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !answer.isEmpty else { return false }
+        do {
+            _ = try await service.answerRequest(id: id, answer: answer)
+            requestError = nil
+            await refreshRequests()
+            return true
+        } catch {
+            requestError = "The sprite did not take the answer. Try again."
+            return false
+        }
     }
 
     /// While a request is in the agent's hands the app checks back on its
