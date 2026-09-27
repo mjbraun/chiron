@@ -190,6 +190,17 @@ final class BookSession: ObservableObject {
         guard let page, let r = await page.find(text) else { return nil }
         return addMark(kind: kind, start: r.start, end: r.end, text: r.text)
     }
+    /// The reader's options, kept on the device.
+    private let defaults: UserDefaults
+    /// Whether a break the server suggests is taken: the break screen with
+    /// its timer between the results and the next chapter. Off unless the
+    /// reader turns it on in the settings; read when the suggestion
+    /// arrives, so a change applies to the next check.
+    static let breakTimeKey = "breakTime"
+    var breakTime: Bool {
+        get { defaults.bool(forKey: Self.breakTimeKey) }
+        set { defaults.set(newValue, forKey: Self.breakTimeKey); objectWillChange.send() }
+    }
     /// Held from a graded exchange until the learner leaves the results.
     private var pendingBreak: BreakSuggestion?
     private var pendingAuthoring: String?
@@ -197,10 +208,12 @@ final class BookSession: ObservableObject {
     private var retryAction: (() async -> Void)?
     private let dir: URL
 
-    init(subjectID: String, title: String, service: ChironService, storage: URL) {
+    init(subjectID: String, title: String, service: ChironService, storage: URL,
+         defaults: UserDefaults = .standard) {
         self.subjectID = subjectID
         self.title = title
         self.service = service
+        self.defaults = defaults
         dir = storage.appendingPathComponent(subjectID, isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     }
@@ -544,7 +557,7 @@ final class BookSession: ObservableObject {
         lastResults = resp.results
         if let ch = resp.chapter { setChapter(ch) }
         if let unit = resp.authoring { pendingAuthoring = unit }
-        if let b = resp.breakSuggestion { pendingBreak = b }
+        if let b = resp.breakSuggestion, breakTime { pendingBreak = b }
         persist()
         // The exchange is over; what follows may need one of its own (an
         // authoring wait that ends in a fresh start), and that must not be

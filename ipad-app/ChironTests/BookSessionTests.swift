@@ -192,15 +192,22 @@ final class FakeService: ChironService {
 final class BookSessionTests: XCTestCase {
     private var fake: FakeService!
     private var storage: URL!
+    /// The reader's options, fresh for each test: what one test switches
+    /// on must not reach the next.
+    private var defaults: UserDefaults!
+    private var suite: String!
 
     override func setUp() {
         fake = FakeService()
         storage = FileManager.default.temporaryDirectory
             .appendingPathComponent("chiron-tests-\(UUID().uuidString)", isDirectory: true)
+        suite = "book-session-\(UUID().uuidString)"
+        defaults = UserDefaults(suiteName: suite)!
     }
 
     override func tearDown() {
         try? FileManager.default.removeItem(at: storage)
+        defaults.removePersistentDomain(forName: suite)
     }
 
     /// A chapter as the server sends one, for a book with nothing to answer.
@@ -220,7 +227,7 @@ final class BookSessionTests: XCTestCase {
     }
 
     private func session() -> BookSession {
-        let s = BookSession(subjectID: "ai", title: "How AI Works", service: fake, storage: storage)
+        let s = BookSession(subjectID: "ai", title: "How AI Works", service: fake, storage: storage, defaults: defaults)
         s.pollInterval = 0
         return s
     }
@@ -329,6 +336,36 @@ final class BookSessionTests: XCTestCase {
                          breakSuggestion: nil, authoring: nil, resultsDoc: nil)
     }
 
+    /// Break time is off unless the reader turns it on: the server's
+    /// suggestion is dropped, leaving the results goes straight to the
+    /// chapter, and no break is reported.
+    func testBreakTimeIsOffByDefault() async {
+        scriptFreshBook()
+        fake.onExchange = { [unowned self] req in
+            if req.phase == "start" { return self.deliversU1() }
+            if req.breakMinutes != nil { XCTFail("a break was reported with break time off") }
+            return self.fixture(ExchangeResponse.self, "exchange-fail")
+        }
+        let s = session()
+        XCTAssertFalse(s.breakTime)
+        await s.open()
+        await s.submitCheck([ItemResponse(itemId: "u1-q1", response: "wrong", selectedIndex: nil, confidence: 4)])
+        guard case .results = s.screen else { return XCTFail("\(s.screen)") }
+        await s.proceed()
+        guard case .reading = s.screen else { return XCTFail("\(s.screen)") }
+        XCTAssertEqual(s.chapter?.unit, "u1")
+    }
+
+    /// The option is the reader's, kept on the device: a session made later
+    /// on the same device sees it.
+    func testBreakTimeIsKeptOnTheDevice() {
+        let s = session()
+        s.breakTime = true
+        XCTAssertTrue(session().breakTime)
+        s.breakTime = false
+        XCTAssertFalse(session().breakTime)
+    }
+
     func testBelowTheGateOffersTheBreakThenRemediationOrOverride() async {
         scriptFreshBook()
         fake.onExchange = { [unowned self] req in
@@ -338,6 +375,7 @@ final class BookSessionTests: XCTestCase {
             return self.fixture(ExchangeResponse.self, "exchange-fail")
         }
         let s = session()
+        s.breakTime = true
         await s.open()
         guard case .reading = s.screen else { return XCTFail("\(s.screen)") }
         await s.submitCheck([ItemResponse(itemId: "u1-q1", response: "wrong", selectedIndex: nil, confidence: 4)])

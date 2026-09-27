@@ -30,6 +30,22 @@ final class AppCommandsTests: XCTestCase {
         }
     }
 
+    /// Break time is off until the breaks verb turns it on, and the state
+    /// reports which.
+    func testBreaksVerbTurnsBreakTimeOn() async throws {
+        let suite = "app-commands-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        addTeardownBlock { defaults.removePersistentDomain(forName: suite) }
+        let storage = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let library = Library(storage: storage, service: FakeService(), defaults: defaults)
+        XCTAssertEqual(AppCommands.state(library)["break_time"] as? Bool, false)
+        _ = try await AppCommands.run("breaks", args: [:], library: library)
+        XCTAssertTrue(library.breakTime)
+        XCTAssertEqual(AppCommands.state(library)["break_time"] as? Bool, true)
+        _ = try await AppCommands.run("breaks", args: ["on": false], library: library)
+        XCTAssertFalse(library.breakTime)
+    }
+
     func testUnknownVerbIsRefused() async {
         let s = session()
         do {

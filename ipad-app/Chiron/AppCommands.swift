@@ -157,6 +157,8 @@ enum AppCommands {
             guard let subject = args["subject"] as? String else { throw Failure.badArguments("move needs subject") }
             let shelf = (args["shelf"] as? String).flatMap { $0.isEmpty ? nil : $0 }
             await library.move(subject, to: shelf)
+        case "breaks":
+            library.breakTime = args["on"] as? Bool ?? true
         case "agent":
             let on = args["on"] as? Bool ?? true
             library.agent.enabled = on
@@ -410,6 +412,7 @@ enum AppCommands {
             "requests_card": library.requestsShown,
             "requests_waiting": library.waitingOnReader,
             "settings_card": library.settingsShown,
+            "break_time": library.breakTime,
             "capture_answer": library.captureAnswer ?? "",
             "shelf_rows": library.subjects.map { ["id": $0.id, "kind": $0.kind ?? "book", "status": $0.status ?? "", "scale": $0.scale ?? "", "progress": $0.progress ?? "", "shelf": $0.shelf ?? "", "unread": $0.unread ?? 0, "updated": $0.updatedAt ?? ""] },
             "shelves": library.shelves.map { ["id": $0.id, "name": $0.name, "subjects": $0.subjects] },

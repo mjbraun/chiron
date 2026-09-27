@@ -186,8 +186,10 @@ for DEVICE in $DEVICES; do
       cmd /answer '{"mode":"mixed"}'
       expect results
       shot 07 results-mixed 2.5
+      # Break time is off by default; on, a long chunk earns a break
+      # suggestion and a short one goes straight on.
+      cmd /breaks
       cmd /proceed
-      # A long chunk earns a break suggestion; a short one goes straight on.
       screen=$(curl -sf "$H/state" | python3 -c 'import json,sys; print(json.load(sys.stdin)["screen"])')
       if [ "$screen" = "break" ]; then
         shot 08 break

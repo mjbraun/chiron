@@ -40,6 +40,7 @@ import Network
 ///   POST /capture/close      dismiss the capture card
 ///   POST /note {text, note}  a margin note on a primer's passage; the primer grows
 ///   POST /agent {on}         let the sprite's agent drive the app (default on)
+///   POST /breaks {on}        take the breaks the server suggests (default on; the app's default is off)
 ///   POST /shell              open the shell sheet;  POST /shell/close closes it
 ///   POST /shell/type {text}  type into the shell
 ///   GET  /shell/screen       {phase, lines}: what the terminal shows

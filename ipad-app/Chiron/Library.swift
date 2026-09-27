@@ -29,6 +29,13 @@ final class Library: ObservableObject {
         didSet { defaults.set(order.rawValue, forKey: "shelfOrder") }
     }
     private let defaults: UserDefaults
+    /// Whether the book takes the breaks the server suggests. The reader's
+    /// choice, off unless turned on in the settings; every session reads
+    /// it from the same store.
+    var breakTime: Bool {
+        get { defaults.bool(forKey: BookSession.breakTimeKey) }
+        set { defaults.set(newValue, forKey: BookSession.breakTimeKey); objectWillChange.send() }
+    }
     #if DEBUG
     /// The last URL the app was opened with, for the harness.
     var lastOpenedURL: String?
@@ -558,7 +565,7 @@ final class Library: ObservableObject {
         let s = sessions[id] ?? BookSession(
             subjectID: id,
             title: info?.title ?? id,
-            service: service, storage: storage)
+            service: service, storage: storage, defaults: defaults)
         if let k = info?.kind { s.kind = k }
         s.assets = bookAssets
         s.localTutor = LocalTutor.ifAvailable

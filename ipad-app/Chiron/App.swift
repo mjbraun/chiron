@@ -523,6 +523,8 @@ struct ConnectionSettings: View {
 
                 DeviceKeySection(sync: library.sync)
 
+                ReadingSection()
+
                 AgentSection(agent: library.agent)
 
                 Section { ConnectionBadge() }
@@ -637,6 +639,23 @@ struct DeviceKeySection: View {
     private func revoke(_ key: EnrolledKey) async {
         try? await sync.revokeKey(fingerprint: key.fingerprint)
         await load()
+    }
+}
+
+/// The reader's options for the book itself.
+struct ReadingSection: View {
+    @EnvironmentObject var library: Library
+
+    var body: some View {
+        Section {
+            Toggle(isOn: Binding(get: { library.breakTime }, set: { library.breakTime = $0 })) {
+                Label("Break time", systemImage: "moon.zzz")
+            }
+        } header: {
+            Text("Reading")
+        } footer: {
+            Text("With this on, a long stretch or a finished chunk earns a timed break between the results and the next chapter. Off, the book goes straight on.")
+        }
     }
 }
 
