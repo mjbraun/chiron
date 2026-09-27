@@ -762,7 +762,14 @@ func (s *Server) processExchange(sub *Subject, ex Exchange, asyncAuthor bool) ma
 			Note: "Chunk done. Five minutes, eyes off screens."}
 	}
 
-	advanceAllowed := gate == nil || gate.Passed || ex.Override || ex.SkippedCheck
+	// A break report is telemetry, not a request for a chapter: nothing was
+	// answered and nothing is owed. Whatever was pending before the break
+	// (a chapter being authored after a failed gate, or one already on disk)
+	// follows through /chapter; authoring another here would spend minutes
+	// of model time and replace the remediation chapter with a plain rewrite.
+	breakReport := ex.BreakMinutes > 0 && ex.Phase != "start" &&
+		len(ex.CheckResponses) == 0 && !ex.Override && !ex.SkippedCheck && !ex.CatchMeUp
+	advanceAllowed := (gate == nil || gate.Passed || ex.Override || ex.SkippedCheck) && !breakReport
 	if ex.CatchMeUp {
 		if ch, err := s.buildCatchup(sub); err == nil {
 			chapter = ch

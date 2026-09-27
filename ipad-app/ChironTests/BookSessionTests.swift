@@ -402,6 +402,55 @@ final class BookSessionTests: XCTestCase {
         guard case .series = s.screen else { return XCTFail("\(s.screen)") }
     }
 
+    /// A chapter with a pretest in front of it, as the server sends one.
+    private func chapterWithPretest(_ unit: String) -> ChapterPayload {
+        let json = """
+        {"unit":"\(unit)","title":"Tokens","minutes":9,"html":"<p>prose</p>","beats":[],
+         "pretest":[{"id":"\(unit)-p1","kind":"constructed","prompt":"What is a token?","check":"rubric"}],
+         "check":[],"calibration":false,"next_action":"read"}
+        """
+        return try! JSONDecoder().decode(ChapterPayload.self, from: Data(json.utf8))
+    }
+
+    /// Below the gate with break time on, the remediation chapter is still
+    /// authoring when the break starts. A server may hand that chapter over
+    /// on the break report itself; the pretest in front of it then leads
+    /// into the chapter. It must not lead back into a wait for the chapter
+    /// already in hand, which fetched it again and reopened the pretest from
+    /// its first question (2026-09-27).
+    func testAChapterDeliveredAfterTheBreakEndsTheAuthoringWait() async {
+        scriptFreshBook()
+        let state = fixture(BookState.self, "state")
+        fake.onChapter = { [unowned self] _ in
+            ChapterStatus(chapter: self.chapterWithPretest("u1"), authoring: false, authoringError: "")
+        }
+        fake.onExchange = { [unowned self] req in
+            if req.phase == "start" { return self.deliversU1() }
+            if req.breakMinutes != nil {
+                return ExchangeResponse(results: [], gate: nil, chapter: self.chapterWithPretest("u1"), state: state,
+                                        breakSuggestion: nil, authoring: nil, resultsDoc: nil)
+            }
+            if req.phase == "pretest" { return self.deliversNothing() }
+            return self.fixture(ExchangeResponse.self, "exchange-fail")
+        }
+        let s = session()
+        s.breakTime = true
+        await s.open()
+        await s.submitCheck([ItemResponse(itemId: "u1-q1", response: "wrong", selectedIndex: nil, confidence: 4)])
+        guard case .results = s.screen else { return XCTFail("\(s.screen)") }
+        await s.proceed()
+        guard case .takingBreak = s.screen else { return XCTFail("\(s.screen)") }
+        await s.breakFinished(minutes: 5)
+        guard case .pretest = s.screen else { return XCTFail("\(s.screen)") }
+
+        let polls = fake.chapterPolls
+        await s.submitPretest([ItemResponse(itemId: "u1-p1", response: "a string", selectedIndex: nil, confidence: 2)])
+        XCTAssertEqual(fake.exchanges.last?.phase, "pretest")
+        guard case .reading = s.screen else { return XCTFail("\(s.screen)") }
+        XCTAssertEqual(s.chapter?.unit, "u1")
+        XCTAssertEqual(fake.chapterPolls, polls, "no wait for a chapter already in hand")
+    }
+
     func testServerAwayIsAnErrorScreenAndTryAgainRecovers() async {
         let s = session()
         await s.open()

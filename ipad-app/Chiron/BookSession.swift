@@ -555,7 +555,13 @@ final class BookSession: ObservableObject {
         }
         bookState = resp.state
         lastResults = resp.results
-        if let ch = resp.chapter { setChapter(ch) }
+        if let ch = resp.chapter {
+            setChapter(ch)
+            // The chapter in hand supersedes any promise of one. A wait kept
+            // from an earlier exchange would fetch this same chapter again
+            // and reopen it from the top, pretest first.
+            pendingAuthoring = nil
+        }
         if let unit = resp.authoring { pendingAuthoring = unit }
         if let b = resp.breakSuggestion, breakTime { pendingBreak = b }
         persist()

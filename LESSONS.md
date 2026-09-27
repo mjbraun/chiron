@@ -63,6 +63,19 @@ symptom, the cause, what to do. Add to it in the same commit as the fix.
 
 ## Server and sprite
 
+- **Finishing a pretest went back to its first question (2026-09-27).**
+  After a failed gate the remediation chapter authors in the background
+  and the app keeps a note of it; the reader took the suggested break,
+  and the break report came back with a chapter, because a boundary
+  exchange with nothing to grade advanced to the fringe unit and built it
+  synchronously (three minutes of model time, and it replaced the
+  remediation chapter with a plain rewrite). The app showed that
+  chapter's pretest but never cleared its note, so the pretest exchange,
+  which delivers nothing, went to wait for the promised chapter, fetched
+  it again and reopened the pretest. Now a break report never builds, and
+  a chapter arriving in any exchange clears the note. Read
+  `events.jsonl` under the book's state dir for this kind of thing: two
+  `unit_started` for one unit minutes apart is the sign.
 - **The first request to a sleeping sprite fails (2026-09-24).** The
   platform wakes the sprite on the first connection and that connection
   is refused, or the gate answers 502 while the server comes up; the
