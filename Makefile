@@ -55,7 +55,8 @@ deploy-gate:
 # tree's builds/<token>/, where the gate offers it to the devices.
 app-build:
 	git push -q macbook main
-	@id=$$(ssh macbook build main | tail -1) && [ -n "$$id" ] && \
+	@out=$$(ssh macbook build main); id=$$(echo "$$out" | tail -1); \
+	  case "$$id" in ""|"==>"*) echo "the build on the MacBook failed:"; echo "$$out" | tail -15; exit 1;; esac; \
 	  token=$$(ssh macbook fetch $$id build.json | python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])') && \
 	  dir=$(SERVED)/builds/$$token && mkdir -p $$dir && \
 	  for f in build.json manifest.plist Chiron.ipa Chiron-mac.zip build.log; do ssh macbook fetch $$id $$f > $$dir/$$f; done && \

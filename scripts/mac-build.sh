@@ -31,6 +31,8 @@ CONF="$HOME/.config/chiron-runner/config"
 conf() { [ -f "$CONF" ] && sed -n "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*//p" "$CONF" | head -1 | sed "s|^~|$HOME|" || true; }
 TEAM=$(conf team_id); TEAM=${TEAM:-${CHIRON_TEAM_ID:-}}
 [ -n "$TEAM" ] || { echo "set team_id in ~/.config/chiron-runner/config (or CHIRON_TEAM_ID)" >&2; exit 1; }
+# project.yml takes the team from here when xcodegen generates it.
+export CHIRON_TEAM_ID="$TEAM"
 BUILDS_URL=$(conf builds_url); BUILDS_URL=${BUILDS_URL:-${CHIRON_BUILDS_URL:-}}
 [ -n "$BUILDS_URL" ] || { echo "set builds_url in ~/.config/chiron-runner/config (or CHIRON_BUILDS_URL)" >&2; exit 1; }
 AUTH=()
