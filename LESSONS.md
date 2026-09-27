@@ -71,6 +71,24 @@ symptom, the cause, what to do. Add to it in the same commit as the fix.
   a few times, a moment apart (connection refused, DNS, 502/503/504),
   and never one that timed out or was answered: a capture sent twice is
   two drafts.
+- **A "Teach me" book is invisible until it is written, and a dead
+  connection to GitHub makes the writing look stuck (2026-09-27).** The
+  shelf lists a generated book only after every unit is on disk; while
+  the job runs, only the "Teach me something else" screen shows it
+  (`GET /teach/jobs`), so a reader who goes back to the shelf sees nothing.
+  A Macaroons primer asked for there sat at `planning` for an hour with
+  an empty `corpus-<slug>` dir: the finder was fetching the Rust book's
+  eighty chapter files from raw.githubusercontent.com for their titles,
+  and the HTTP/2 connection went dead (peer stopped acking; `ss -tnpio`
+  showed backoff 13 on the server's socket). Go's client timeout ends each
+  request after 60s but keeps reusing the dead connection, so every file
+  costs a minute until the kernel drops the socket (`tcp_retries2`, about
+  eighteen minutes), a new one works for a few files, and it dies again.
+  Symptoms: no log line at all, no `claude` process, `chiron status
+  <slug>` stays `planning`, `sources.yaml` never appears. Fix to make:
+  the fetch client should not reuse a connection a request timed out on
+  (HTTP/1.1 only, or a ping timeout on HTTP/2). Deploying the server
+  restarts it and kills the running job, so not while one is running.
 - **`sprite-env services create` keeps only the last `--env`
   (2026-09-02).** Two flags left the book server without its key and open.
   One flag, comma-separated.
