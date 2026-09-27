@@ -23,6 +23,9 @@ struct ItemFlowView: View {
     @State private var selected: Int?
     @State private var confidence = 2
     @State private var revealed = false
+    /// The item was answered "I don't know": the reveal names the answer
+    /// without dressing it as the reader's pick.
+    @State private var passed = false
     @State private var responses: [ItemResponse] = []
     @State private var confirmingExit = false
     /// Typed is the default; handwriting is a toggle per item (a finger on
@@ -104,11 +107,25 @@ struct ItemFlowView: View {
                             // The lettered options answer to their number key.
                             .keyboardShortcut(KeyEquivalent(Character("\(i + 1)")), modifiers: [])
                             .accessibilityLabel("Option \(String(UnicodeScalar(65 + i)!))")
-                            if revealed, let r = item.reveal?.options?[i],
-                               selected == i || r.correct {
-                                MathText(text: r.explain, size: 15)
-                                    .foregroundStyle(r.correct ? .green : .orange)
-                                    .padding(.leading, 30)
+                            if revealed, let r = item.reveal?.options?[i] {
+                                if passed {
+                                    if r.correct {
+                                        let why = PassReveal.explanation(r.explain)
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            Text(PassReveal.headline(correct: i))
+                                                .font(.callout.weight(.semibold))
+                                            if !why.isEmpty {
+                                                MathText(text: why, size: 15)
+                                            }
+                                        }
+                                        .foregroundStyle(.secondary)
+                                        .padding(.leading, 30)
+                                    }
+                                } else if selected == i || r.correct {
+                                    MathText(text: r.explain, size: 15)
+                                        .foregroundStyle(r.correct ? .green : .orange)
+                                        .padding(.leading, 30)
+                                }
                             }
                         }
                     } else {
@@ -136,6 +153,9 @@ struct ItemFlowView: View {
                     // saying so is better signal than typing filler to get
                     // past a required field. Always leftmost, always there.
                     Button("I don't know") {
+                        // An option tapped before passing was not an answer.
+                        selected = nil
+                        passed = true
                         answered(ItemResponse(
                             itemId: item.id,
                             response: nil,
@@ -240,7 +260,7 @@ struct ItemFlowView: View {
             Task { await onSubmit(out) }
         } else {
             index += 1
-            text = ""; selected = nil; confidence = 2; revealed = false
+            text = ""; selected = nil; confidence = 2; revealed = false; passed = false
             drawing = PKDrawing()
             inkAnswer = nil
             typing = !handwriting && items[index].kind != "mcq"
@@ -250,14 +270,14 @@ struct ItemFlowView: View {
     private func iconFor(_ i: Int) -> String {
         if !revealed { return selected == i ? "largecircle.fill.circle" : "circle" }
         guard let r = item.reveal?.options?[i] else { return "circle" }
-        if r.correct { return "checkmark.circle.fill" }
+        if r.correct { return passed ? "checkmark.circle" : "checkmark.circle.fill" }
         return selected == i ? "xmark.circle.fill" : "circle"
     }
 
     private func backgroundFor(_ i: Int) -> Color {
         if !revealed { return selected == i ? Color.accentColor.opacity(0.15) : Color.clear }
         guard let r = item.reveal?.options?[i] else { return .clear }
-        if r.correct { return .green.opacity(0.12) }
+        if r.correct { return passed ? Color.secondary.opacity(0.10) : .green.opacity(0.12) }
         return selected == i ? .red.opacity(0.10) : .clear
     }
 }
