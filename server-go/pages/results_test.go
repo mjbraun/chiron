@@ -231,3 +231,25 @@ func TestWrapResultsShowsWhatTheReaderFlagged(t *testing.T) {
 		t.Error("the concern is not quoted, escaped, on the page")
 	}
 }
+
+// Under the flag, the grader's ruling: upheld or not, in its own words.
+func TestWrapResultsShowsTheRulingOnAFlag(t *testing.T) {
+	r := &Renderer{KatexDir: "k", CacheDir: "c"}
+	d := sampleResults()
+	d.Entries[0].Flag = "two options are right"
+	d.Entries[0].FlagRuling = "B is right too: the item is ambiguous."
+	d.Entries[0].FlagUpheld = true
+	d.Entries[1].Flag = "the reference is wrong"
+	d.Entries[1].FlagRuling = "It is right; see the second paragraph."
+	doc := r.wrapResults(d)
+	if !strings.Contains(doc, "UPHELD") || !strings.Contains(doc, "B is right too: the item is ambiguous.") {
+		t.Error("the upheld ruling is not on the page")
+	}
+	if !strings.Contains(doc, "NOT UPHELD") || !strings.Contains(doc, "It is right; see the second paragraph.") {
+		t.Error("the rejected ruling is not on the page")
+	}
+	d.Entries[0].FlagRuling, d.Entries[1].FlagRuling = "", ""
+	if doc := r.wrapResults(d); strings.Contains(doc, "UPHELD") {
+		t.Error("a flag not yet ruled on shows no ruling")
+	}
+}

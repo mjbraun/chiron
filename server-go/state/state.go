@@ -160,6 +160,10 @@ type Flag struct {
 	Answer    string  `json:"answer,omitempty"`
 	Reference string  `json:"reference,omitempty"`
 	TS        float64 `json:"ts"`
+	// The grader's ruling, once there is one: whether the reader was right,
+	// and its word to them.
+	Ruling string `json:"ruling,omitempty"`
+	Upheld bool   `json:"upheld,omitempty"`
 }
 
 // maxQuestions bounds the snapshot: the log keeps everything.
@@ -371,6 +375,14 @@ func (l *Learner) handle(ev Event) {
 			Unit: ev.Unit, Item: ev.Item, Concern: ev.Text, Answer: ev.Evidence, Reference: ev.Why, TS: ev.TS})
 		if n := len(l.Data.Flags); n > maxQuestions {
 			l.Data.Flags = l.Data.Flags[n-maxQuestions:]
+		}
+	case "flag_ruled":
+		// On the newest flag of the item still waiting for a ruling.
+		for i := len(l.Data.Flags) - 1; i >= 0; i-- {
+			if f := &l.Data.Flags[i]; f.Item == ev.Item && f.Ruling == "" {
+				f.Ruling, f.Upheld = ev.Text, ev.Verdict == "upheld"
+				break
+			}
 		}
 	case "assumed_known":
 		seen := map[string]bool{}
@@ -689,6 +701,19 @@ func (l *Learner) Flags(unit string) []Flag {
 		}
 	}
 	return out
+}
+
+// UnruledFlag is the newest flag on the item still waiting for the
+// grader's ruling, or nil.
+func (l *Learner) UnruledFlag(item string) *Flag {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for i := len(l.Data.Flags) - 1; i >= 0; i-- {
+		if f := l.Data.Flags[i]; f.Item == item && f.Ruling == "" {
+			return &f
+		}
+	}
+	return nil
 }
 
 func (l *Learner) Snapshot() Data {

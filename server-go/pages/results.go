@@ -20,12 +20,14 @@ type ResultsEntry struct {
 	IDK        bool   `json:"idk,omitempty"`
 	Kind       string `json:"kind"`
 	Prompt     string `json:"prompt"`
-	Confidence int    `json:"confidence,omitempty"` // 1-4, 0 when absent
-	ReadAs     string `json:"read_as,omitempty"`    // transcript, constructed
-	Chose      string `json:"chose,omitempty"`      // "B — 'option text'", MCQ
-	Answer     string `json:"answer,omitempty"`     // reference; math allowed
-	Why        string `json:"why,omitempty"`        // grader/option explanation
-	Flag       string `json:"flag,omitempty"`       // the reader's concern, if they flagged the item
+	Confidence int    `json:"confidence,omitempty"`  // 1-4, 0 when absent
+	ReadAs     string `json:"read_as,omitempty"`     // transcript, constructed
+	Chose      string `json:"chose,omitempty"`       // "B — 'option text'", MCQ
+	Answer     string `json:"answer,omitempty"`      // reference; math allowed
+	Why        string `json:"why,omitempty"`         // grader/option explanation
+	Flag       string `json:"flag,omitempty"`        // the reader's concern, if they flagged the item
+	FlagRuling string `json:"flag_ruling,omitempty"` // the grader's word on the flag
+	FlagUpheld bool   `json:"flag_upheld,omitempty"` // whether the reader was right
 }
 
 type ResultsDoc struct {
@@ -156,6 +158,13 @@ func entryHTML(e ResultsEntry) string {
 	// What the reader said was wrong with the item, in their words.
 	if e.Flag != "" {
 		b.WriteString(metaRow("FLAGGED", quoted(e.Flag), "erow-flag"))
+		if e.FlagRuling != "" {
+			label := "NOT UPHELD"
+			if e.FlagUpheld {
+				label = "UPHELD"
+			}
+			b.WriteString(metaRow(label, escapeText(e.FlagRuling), "erow-flag"))
+		}
 	}
 	b.WriteString(`</div></div>`)
 	return b.String()

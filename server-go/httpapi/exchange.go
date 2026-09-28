@@ -74,6 +74,9 @@ type Result struct {
 	roles.Grade
 	Confidence  *int   `json:"confidence,omitempty"`
 	SelfVerdict string `json:"self_verdict,omitempty"`
+	// The grader's ruling on the reader's flag, when the item had one.
+	FlagRuling string `json:"flag_ruling,omitempty"`
+	FlagUpheld bool   `json:"flag_upheld,omitempty"`
 }
 
 type Gate struct {
@@ -179,6 +182,9 @@ func (s *Server) gradeItems(sub *Subject, responses []ItemResponse, results *[]R
 				g = roles.GradeFreeText(s.chain, it.q, it.r.Response, sub.Corpus.Misconceptions)
 			}
 		}
+		// A flag on the item waiting for a ruling gets one now. Upheld, the
+		// answer counts; either way the reader hears why.
+		ruling, upheld := s.ruleOnFlag(sub, it.q, it.unitID, it.r, &g)
 		if passedVerdict(g.Verdict) {
 			passed++
 		}
@@ -190,9 +196,40 @@ func (s *Server) gradeItems(sub *Subject, responses []ItemResponse, results *[]R
 		}); err != nil {
 			return passed, len(responses)
 		}
-		*results = append(*results, Result{ItemID: it.r.ItemID, Grade: g, Confidence: &conf})
+		*results = append(*results, Result{ItemID: it.r.ItemID, Grade: g, Confidence: &conf,
+			FlagRuling: ruling, FlagUpheld: upheld})
 	}
 	return passed, len(responses)
+}
+
+// ruleOnFlag has the grader rule on the newest unruled flag on the item,
+// if there is one, and records the ruling. An upheld flag on a missed item
+// makes it a pass. Without a model the flag waits for the next grading.
+func (s *Server) ruleOnFlag(sub *Subject, q *corpus.Question, unit string, r ItemResponse, g *roles.Grade) (string, bool) {
+	f := sub.Learner.UnruledFlag(r.ItemID)
+	if f == nil {
+		return "", false
+	}
+	answer := r.Response
+	switch {
+	case r.IDK:
+		answer = "I don't know."
+	case q.Kind == "mcq":
+		answer = chosenOption(q, r.SelectedIndex)
+	}
+	ruling, err := roles.RuleOnFlag(s.chain, q, answer, g.Verdict, f.Concern)
+	if err != nil {
+		return "", false
+	}
+	verdict := "not_upheld"
+	if ruling.Upheld {
+		verdict = "upheld"
+		if !passedVerdict(g.Verdict) {
+			g.Verdict = "pass"
+		}
+	}
+	sub.Learner.Apply(state.Event{Kind: "flag_ruled", Unit: unit, Item: r.ItemID, Verdict: verdict, Text: ruling.Reply})
+	return ruling.Reply, ruling.Upheld
 }
 
 func (s *Server) gradeBeats(sub *Subject, responses []BeatResponse, results *[]Result) {
@@ -1070,9 +1107,9 @@ func (s *Server) buildResultsDoc(sub *Subject, ex Exchange, results []Result, ga
 	}
 
 	// What the reader flagged during the check, the latest word per item.
-	flagged := map[string]string{}
+	flagged := map[string]state.Flag{}
 	for _, f := range sub.Learner.Flags(ex.Unit) {
-		flagged[f.Item] = f.Concern
+		flagged[f.Item] = f
 	}
 	for _, res := range results {
 		q, _ := sub.Corpus.FindQuestion(res.ItemID)
@@ -1102,7 +1139,9 @@ func (s *Server) buildResultsDoc(sub *Subject, ex Exchange, results []Result, ga
 			!strings.HasPrefix(fb, "Reference:") && !strings.HasPrefix(fb, "Marked \"I don't know\".") {
 			e.Why = fb
 		}
-		e.Flag = flagged[res.ItemID]
+		if f, ok := flagged[res.ItemID]; ok {
+			e.Flag, e.FlagRuling, e.FlagUpheld = f.Concern, f.Ruling, f.Upheld
+		}
 		doc.Entries = append(doc.Entries, e)
 	}
 	// Unmapped items (not in the persisted chapter) sort last, in

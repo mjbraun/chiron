@@ -241,6 +241,12 @@ symptom, the cause, what to do. Add to it in the same commit as the fix.
   which XcodeGen regenerates from `project.yml` - they vanished on the
   next `xcodegen generate`. An app change from the agent is untested
   until the Mac builds it; plist keys go in `project.yml`.
+  The same holds for anything behind `CHIRON_RENDER`: the sprite runs
+  the suite with renders off, so a test that only bites on a rendered
+  page (the flag request asserted text inside a results page, which is
+  a PNG) passes there and fails on the Mac. And the app tests the agent
+  writes can be wrong themselves: two of its repair tests served a
+  chapter from `/chapter` before any was asked for, and never passed.
 
 ## Mac side
 

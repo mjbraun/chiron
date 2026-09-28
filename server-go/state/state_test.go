@@ -380,3 +380,35 @@ func TestCheckResultKeepsTheMisses(t *testing.T) {
 		t.Errorf("status after the repair: %s", l.UnitStatus("u1"))
 	}
 }
+
+// A flag is ruled once: the ruling lands on the newest unruled flag of
+// the item, and a ruled flag is not offered for ruling again.
+func TestAFlagIsRuledOnce(t *testing.T) {
+	l := newLearner(t)
+	l.Apply(Event{Kind: "flagged", Unit: "u1", Item: "u1-q1", Text: "two answers are right", Evidence: "B", Why: "A"})
+	f := l.UnruledFlag("u1-q1")
+	if f == nil || f.Concern != "two answers are right" {
+		t.Fatalf("unruled = %+v", f)
+	}
+	if l.UnruledFlag("u1-q2") != nil {
+		t.Error("an item nobody flagged has no flag")
+	}
+	l.Apply(Event{Kind: "flag_ruled", Unit: "u1", Item: "u1-q1", Verdict: "upheld", Text: "B is right too."})
+	if l.UnruledFlag("u1-q1") != nil {
+		t.Error("a ruled flag is not ruled again")
+	}
+	flags := l.Flags("u1")
+	if len(flags) != 1 || !flags[0].Upheld || flags[0].Ruling != "B is right too." {
+		t.Fatalf("flags = %+v", flags)
+	}
+	// A new flag on the same item is its own, and waits for its own ruling.
+	l.Apply(Event{Kind: "flagged", Unit: "u1", Item: "u1-q1", Text: "and the wording", Evidence: "B", Why: "A"})
+	if f := l.UnruledFlag("u1-q1"); f == nil || f.Concern != "and the wording" {
+		t.Fatalf("second flag = %+v", f)
+	}
+	l.Apply(Event{Kind: "flag_ruled", Unit: "u1", Item: "u1-q1", Verdict: "not_upheld", Text: "The wording is fine."})
+	flags = l.Flags("u1")
+	if flags[1].Upheld || flags[1].Ruling != "The wording is fine." || !flags[0].Upheld {
+		t.Fatalf("flags = %+v", flags)
+	}
+}

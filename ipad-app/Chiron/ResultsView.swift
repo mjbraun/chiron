@@ -174,6 +174,9 @@ struct ResultsEntryView: View {
                 }
                 if let flag = entry.flag, !flag.isEmpty {
                     MetaRow(label: "FLAGGED", value: "“\(flag)”")
+                    if let label = entry.rulingLabel, let ruling = entry.flagRuling {
+                        MetaRow(label: label, value: ruling)
+                    }
                 }
             }
         }

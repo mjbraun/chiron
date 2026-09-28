@@ -571,14 +571,27 @@ struct ResultsEntry: Codable, Identifiable {
     let why: String?
     /// The reader's concern, if they flagged the item during the check.
     let flag: String?
+    /// The grader's word on the flag, once it has ruled, and whether the
+    /// reader was right (an upheld flag counts the answer).
+    let flagRuling: String?
+    private let upheld: Bool?
 
     var id: Int { n }
     var isIDK: Bool { idk == true }
     var passed: Bool { verdict == "pass" || verdict == "valid_alternative_path" }
+    var flagUpheld: Bool { upheld == true }
+
+    /// The label the ruling's row carries, or nil while there is none.
+    var rulingLabel: String? {
+        guard let r = flagRuling, !r.isEmpty else { return nil }
+        return flagUpheld ? "UPHELD" : "NOT UPHELD"
+    }
 
     enum CodingKeys: String, CodingKey {
         case n, verdict, idk, kind, prompt, confidence, chose, answer, why, flag
         case readAs = "read_as"
+        case flagRuling = "flag_ruling"
+        case upheld = "flag_upheld"
     }
 }
 

@@ -77,9 +77,11 @@ func TestFlagRecordsTheConcernAgainstTheItem(t *testing.T) {
 	if len(flagged) != 1 || flagged[0] != concern {
 		t.Fatalf("flagged entries = %q, want the one concern", flagged)
 	}
+	// The typeset page is a picture; the flag's row on it is tested where
+	// the page is laid out (pages/results_test.go). Here: it renders.
 	page := do(t, s, "GET", "/pages/ai/results/0", "", "")
-	if page.Code == http.StatusOK && !strings.Contains(page.Body.String(), "FLAGGED") {
-		t.Errorf("the typeset results page does not show the flag")
+	if page.Code == http.StatusOK && page.Header().Get("Content-Type") != "image/png" {
+		t.Errorf("the typeset results page is %q", page.Header().Get("Content-Type"))
 	}
 }
 
