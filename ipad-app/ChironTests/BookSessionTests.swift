@@ -392,8 +392,10 @@ final class BookSessionTests: XCTestCase {
             if req.breakMinutes != nil { return self.deliversNothing() }
             return self.fixture(ExchangeResponse.self, "exchange-fail")
         }
+        // Like a real server: no chapter until one was asked for, then that one.
         fake.onChapter = { [unowned self] _ in
-            ChapterStatus(chapter: self.chapterPayload(promised, "Tokens"), authoring: false, authoringError: "")
+            promised.isEmpty ? ChapterStatus(chapter: nil, authoring: false, authoringError: "")
+                : ChapterStatus(chapter: self.chapterPayload(promised, "Tokens"), authoring: false, authoringError: "")
         }
         let s = session()
         s.breakTime = true
@@ -791,8 +793,11 @@ final class BookSessionTests: XCTestCase {
             }
             return self.fixture(ExchangeResponse.self, "exchange-fail")
         }
+        // Like a real server: no chapter until the repair was asked for.
         fake.onChapter = { [unowned self] _ in
-            ChapterStatus(chapter: self.chapterPayload("u1.repair", "The misses: Tokens"), authoring: false, authoringError: "")
+            self.fake.exchanges.contains { $0.repair }
+                ? ChapterStatus(chapter: self.chapterPayload("u1.repair", "The misses: Tokens"), authoring: false, authoringError: "")
+                : ChapterStatus(chapter: nil, authoring: false, authoringError: "")
         }
         let s = session()
         await s.open()
