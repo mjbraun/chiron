@@ -16,6 +16,14 @@ struct ChapterPayload: Codable, Identifiable {
     let calibration: Bool?
     let nextAction: String?
 
+    /// The unit a chapter grades against: itself, or for a repair chapter
+    /// ("u1.repair": the misses of a failed check, then those items
+    /// again) the unit it repairs. The spine and the fringe know only the
+    /// latter.
+    var baseUnit: String {
+        unit.hasSuffix(".repair") ? String(unit.dropLast(".repair".count)) : unit
+    }
+
     var id: String { unit }
     var isCalibration: Bool { calibration == true }
 
@@ -457,6 +465,11 @@ struct ExchangeRequest: Codable {
     var override: Bool = false
     var skippedCheck: Bool = false
     var catchMeUp: Bool = false
+    /// After a failed gate: a short chapter on the misses alone, then
+    /// those items again (repair); or the whole chapter again from a
+    /// different angle (remediate). Nothing is written until one is sent.
+    var repair: Bool = false
+    var remediate: Bool = false
     var choice: String?
     var chunkMinutes: Double?
     var breakMinutes: Double?
@@ -466,7 +479,7 @@ struct ExchangeRequest: Codable {
     var async: Bool = true
 
     enum CodingKeys: String, CodingKey {
-        case subject, phase, unit, override, choice, async
+        case subject, phase, unit, override, choice, async, repair, remediate
         case beatResponses = "beat_responses"
         case pretestResponses = "pretest_responses"
         case checkResponses = "check_responses"

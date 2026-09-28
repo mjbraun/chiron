@@ -146,7 +146,7 @@ Mapping the tablet client's modes onto iPad screens:
 | reading | **Reader** | `WKWebView`, continuous scroll, chrome on tap; bottom bar: item count, "Take the check" / "Answer the questions"; beats inline as today |
 | screener | **Placement** | native: the question, five rows, one tap, advances immediately (gateless) |
 | reading (calibration series) | **Calibration series** | the series items one per screen, no per-item reveal (it is measurement); commit or IDK; progress "3 of 11"; ends in results |
-| results | **Results** | native: headline (Calibration complete / Gate cleared / Below the gate + score), gate bar, per-item entries with READ AS / ANSWER / WHY typeset via MathText; actions: Continue / Explain it differently / Override |
+| results | **Results** | native: headline (Calibration complete / Gate cleared / Below the gate + score), gate bar, per-item entries with READ AS / ANSWER / WHY typeset via MathText; actions: Continue / Just the misses / Explain it differently / Override |
 | screener->series, series->chapter | **Authoring wait** | "The next chapter is being written" static screen; see server change B |
 | breakSuggested / breakActive | **Break** | existing `BreakView`, wired to `break_suggestion` and `break_minutes` |
 | confirmReset | **Start over** confirmation | existing alert, reachable from Contents |
@@ -252,8 +252,8 @@ Tests to add (a `ChironTests` XCTest target in `project.yml`):
   `active`, `/state`, and the async `authoring` shape as they are captured
   from the real server.
 - State machine: `BookSession` transitions with a fake client (start ->
-  placement -> series -> results -> reading; gate fail -> remediate /
-  override; break; error recovery; reopen restores position).
+  placement -> series -> results -> reading; gate fail -> just the
+  misses / remediate / override; break; error recovery; reopen restores position).
 - Mechanical grading mirror: `book.js` must keep matching `checkers`
   (already covered server-side by `checkers` tests; add a JS test runner
   only if `book.js` changes).

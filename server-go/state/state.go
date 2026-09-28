@@ -46,6 +46,11 @@ type UnitState struct {
 	Status     string   `json:"status,omitempty"`
 	CheckScore *float64 `json:"check_score,omitempty"`
 	Attempts   int      `json:"attempts"`
+	// Missed is what the latest check got wrong, and Items how many it
+	// asked: a failed gate is repaired on the misses alone, and the repair
+	// round is scored against the whole check.
+	Missed []string `json:"missed,omitempty"`
+	Items  int      `json:"items,omitempty"`
 }
 
 type MisconceptionState struct {
@@ -125,6 +130,7 @@ type Event struct {
 	Passed           *bool    `json:"passed,omitempty"`
 	MasteredConcepts []string `json:"mastered_concepts,omitempty"`
 	ItemsMissed      []string `json:"items_missed,omitempty"`
+	Items            int      `json:"items,omitempty"`
 	Reason           string   `json:"reason,omitempty"`
 	Minutes          *float64 `json:"minutes,omitempty"`
 	// Band is the calibration band (1-5) of a graded item; zero outside
@@ -426,6 +432,10 @@ func (l *Learner) onCheckResult(ev Event) {
 		s := *ev.Score
 		u.CheckScore = &s
 	}
+	if ev.Items > 0 {
+		u.Missed = ev.ItemsMissed
+		u.Items = ev.Items
+	}
 	passed := ev.Passed != nil && *ev.Passed
 	if passed {
 		u.Status = "passed"
@@ -490,6 +500,21 @@ func (l *Learner) Reset() error {
 }
 
 // ---------- read-side queries ----------
+
+// LastCheck is the unit's latest check: its score, the items it missed
+// and how many it asked. Zero values before any check.
+func (l *Learner) LastCheck(unitID string) (score float64, missed []string, items int) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	u, ok := l.Data.Units[unitID]
+	if !ok {
+		return 0, nil, 0
+	}
+	if u.CheckScore != nil {
+		score = *u.CheckScore
+	}
+	return score, append([]string(nil), u.Missed...), u.Items
+}
 
 func (l *Learner) UnitStatus(unitID string) string {
 	l.mu.Lock()

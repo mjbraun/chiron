@@ -54,9 +54,15 @@ type Exchange struct {
 	Override         bool           `json:"override"`
 	SkippedCheck     bool           `json:"skipped_check"`
 	CatchMeUp        bool           `json:"catch_me_up"`
-	Choice           string         `json:"choice,omitempty"`
-	ChunkMinutes     float64        `json:"chunk_minutes,omitempty"`
-	BreakMinutes     float64        `json:"break_minutes,omitempty"`
+	// After a failed gate nothing is written until the reader chooses.
+	// Repair asks for a short chapter on the missed items alone, then
+	// those items again; Remediate for the whole unit again from a
+	// different angle. Unit names the unit that failed.
+	Repair       bool    `json:"repair,omitempty"`
+	Remediate    bool    `json:"remediate,omitempty"`
+	Choice       string  `json:"choice,omitempty"`
+	ChunkMinutes float64 `json:"chunk_minutes,omitempty"`
+	BreakMinutes float64 `json:"break_minutes,omitempty"`
 	// Async returns a graded check at once, with the next chapter authored
 	// in the background and fetched from /chapter/{subject}: a client whose
 	// request dies when the OS suspends it cannot wait minutes for a model.
@@ -504,6 +510,95 @@ func (s *Server) markUnitStarted(sub *Subject, unit *corpus.Unit, summary string
 	return nil
 }
 
+// repairSuffix marks the chapter that repairs a unit's misses: "u1.repair"
+// is stored, served and answered as its own chapter, and graded against u1.
+const repairSuffix = ".repair"
+
+// repairBase is the unit a chapter id grades against: the id itself, or
+// the unit a repair chapter repairs.
+func repairBase(unit string) (string, bool) {
+	if base, ok := strings.CutSuffix(unit, repairSuffix); ok {
+		return base, true
+	}
+	return unit, false
+}
+
+// buildRepair is the short chapter on the misses alone: one section per
+// missed item, from a different angle, then the missed items again. The
+// reader's own answers come from the results they just read.
+func (s *Server) buildRepair(sub *Subject, base string) (*render.Chapter, error) {
+	unit, ok := sub.Corpus.Units[base]
+	if !ok {
+		return nil, fmt.Errorf("unit %s not authored", base)
+	}
+	_, missedIDs, items := sub.Learner.LastCheck(base)
+	if len(missedIDs) == 0 {
+		return nil, fmt.Errorf("unit %s has no misses on record", base)
+	}
+	byPrompt := map[string]pages.ResultsEntry{}
+	if doc, err := loadResults(sub); err == nil {
+		if b, _ := repairBase(doc.Unit); b == base {
+			for _, e := range doc.Entries {
+				byPrompt[e.Prompt] = e
+			}
+		}
+	}
+	var misses []roles.Miss
+	var questions []corpus.Question
+	for _, id := range missedIDs {
+		q, uid := sub.Corpus.FindQuestion(id)
+		if q == nil {
+			continue
+		}
+		qq := *q
+		qq.Unit = uid
+		questions = append(questions, qq)
+		m := roles.Miss{Unit: uid, Question: qq}
+		if e, ok := byPrompt[q.Prompt]; ok {
+			m.ReadAs, m.Chose, m.Why, m.IDK = e.ReadAs, e.Chose, e.Why, e.IDK
+		}
+		misses = append(misses, m)
+	}
+	if len(questions) == 0 {
+		return nil, fmt.Errorf("unit %s: none of the missed items are in the bank", base)
+	}
+	sub.setStage("writing")
+	sections, _ := roles.AuthorRepair(s.chain, sub.Corpus, misses)
+	if len(sections) == 0 {
+		return nil, fmt.Errorf("unit %s: nothing to write the repair from", base)
+	}
+	minutes := 3 * len(questions)
+	if minutes < 5 {
+		minutes = 5
+	}
+	repair := &corpus.Unit{
+		ID: base + repairSuffix, Title: "The misses: " + unit.Title, Minutes: minutes,
+		Front: map[string]any{},
+	}
+	if src, ok := unit.Front["sources"]; ok {
+		repair.Front["sources"] = src
+	}
+	note := fmt.Sprintf("%d of the %d questions on the check were missed. "+
+		"This short chapter takes those alone, from a different angle, and then asks them again. "+
+		"The whole check is scored with what this round closes: nothing starts over, and nothing goes into debt.",
+		len(questions), items)
+	if _, err := sub.Learner.Apply(state.Event{Kind: "unit_started", Unit: repair.ID}); err != nil {
+		return nil, err
+	}
+	return render.RenderChapter(repair, sections, render.Directives{
+		OpeningNoteMD: note,
+		NextAction:    "Work the sections, then answer the missed questions again.",
+	}, nil, questions)
+}
+
+// remediationSummary is what the planner hears when the reader asks for
+// the whole unit again after a failed gate.
+func remediationSummary(sub *Subject, base string) string {
+	score, _, _ := sub.Learner.LastCheck(base)
+	return fmt.Sprintf("Check %s: %.0f%% (below gate). REMEDIATE: switch representation, do not re-explain the same way.",
+		base, score*100)
+}
+
 // buildCatchup is the comprehensive backfill from the whole debt ledger:
 // representation-switched sections for every debted concept, then a combined
 // check that can retire the debt.
@@ -691,29 +786,55 @@ func (s *Server) processExchange(sub *Subject, ex Exchange, asyncAuthor bool) ma
 		s.gradeItems(sub, ex.CheckResponses, &results)
 	case len(ex.CheckResponses) > 0:
 		p, t := s.gradeItems(sub, ex.CheckResponses, &results)
+		base, isRepair := repairBase(ex.Unit)
+		checkIDs := map[string]bool{}
+		for _, r := range ex.CheckResponses {
+			checkIDs[r.ItemID] = true
+		}
+		var missed []string
+		for _, res := range results {
+			if checkIDs[res.ItemID] && !passedVerdict(res.Verdict) {
+				missed = append(missed, res.ItemID)
+			}
+		}
+		if isRepair {
+			// The repair round asked the misses again; the score is the
+			// whole check's with the misses this round closed. A miss not
+			// asked again stays a miss.
+			if _, before, items := sub.Learner.LastCheck(base); items > 0 {
+				closed := map[string]bool{}
+				for _, res := range results {
+					if checkIDs[res.ItemID] && passedVerdict(res.Verdict) {
+						closed[res.ItemID] = true
+					}
+				}
+				var still []string
+				for _, id := range before {
+					if !closed[id] {
+						still = append(still, id)
+					}
+				}
+				missed, t, p = still, items, items-len(still)
+			}
+		}
 		score := 0.0
 		if t > 0 {
 			score = float64(p) / float64(t)
 		}
-		unit, haveUnit := sub.Corpus.Units[ex.Unit]
+		unit, haveUnit := sub.Corpus.Units[base]
 		calibration := haveUnit && unit.IsCalibration()
 		passed := score >= sess.MasteryGate || calibration
 		var mastered []string
 		if haveUnit && passed && !calibration {
 			mastered = unit.ConceptIDs()
 		}
-		sub.Learner.Apply(state.Event{Kind: "check_result", Unit: ex.Unit,
-			Score: &score, Passed: &passed, MasteredConcepts: mastered})
+		sub.Learner.Apply(state.Event{Kind: "check_result", Unit: base,
+			Score: &score, Passed: &passed, MasteredConcepts: mastered,
+			ItemsMissed: missed, Items: t})
 
 		if passed && ex.Unit == "catchup" {
 			for _, d := range sub.Learner.OpenDebt() {
 				sub.Learner.Apply(state.Event{Kind: "debt_retired", Unit: d.Unit})
-			}
-		}
-		var missed []string
-		for _, res := range results {
-			if !passedVerdict(res.Verdict) {
-				missed = append(missed, res.ItemID)
 			}
 		}
 		sc := score
@@ -727,7 +848,11 @@ func (s *Server) processExchange(sub *Subject, ex Exchange, asyncAuthor bool) ma
 			if passed {
 				verdict = "passed"
 			}
-			fmt.Fprintf(&summary, "Check %s: %.0f%% (%s). ", ex.Unit, score*100, verdict)
+			label := base
+			if isRepair {
+				label = base + " after repairing the misses"
+			}
+			fmt.Fprintf(&summary, "Check %s: %.0f%% (%s). ", label, score*100, verdict)
 		}
 
 		if !passed && ex.Override && haveUnit {
@@ -737,7 +862,7 @@ func (s *Server) processExchange(sub *Subject, ex Exchange, asyncAuthor bool) ma
 					unmastered = append(unmastered, c)
 				}
 			}
-			sub.Learner.Apply(state.Event{Kind: "override", Unit: ex.Unit,
+			sub.Learner.Apply(state.Event{Kind: "override", Unit: base,
 				Concepts: unmastered, ItemsMissed: missed, Reason: "failed_gate"})
 		}
 
@@ -769,7 +894,12 @@ func (s *Server) processExchange(sub *Subject, ex Exchange, asyncAuthor bool) ma
 	// of model time and replace the remediation chapter with a plain rewrite.
 	breakReport := ex.BreakMinutes > 0 && ex.Phase != "start" &&
 		len(ex.CheckResponses) == 0 && !ex.Override && !ex.SkippedCheck && !ex.CatchMeUp
-	advanceAllowed := (gate == nil || gate.Passed || ex.Override || ex.SkippedCheck) && !breakReport
+	// A choice after a failed gate is about the unit that failed, never a
+	// step to the fringe: the failed unit is still on the fringe, and the
+	// step would rebuild it plainly.
+	afterGate := (ex.Repair || ex.Remediate) && ex.Unit != ""
+	advanceAllowed := (gate == nil || gate.Passed || ex.Override || ex.SkippedCheck) &&
+		!breakReport && !afterGate
 	if ex.CatchMeUp {
 		if ch, err := s.buildCatchup(sub); err == nil {
 			chapter = ch
@@ -789,18 +919,28 @@ func (s *Server) processExchange(sub *Subject, ex Exchange, asyncAuthor bool) ma
 				log.Printf("build chapter %s: %v", next, err)
 			}
 		}
-	} else if chapter == nil && gate != nil && !gate.Passed && !ex.Override && ex.Unit != "" {
-		// Remediation loop: rebuild the SAME unit. The planner sees the failed
-		// check in the summary and must switch representation.
-		remSummary := summary.String() +
-			"REMEDIATE: switch representation, do not re-explain the same way."
+	} else if chapter == nil && afterGate {
+		// After a failed gate the reader chooses: the misses alone (a
+		// short chapter, then those items again), or the whole unit again
+		// from a different angle. Nothing is written before the choice,
+		// so the reader who overrides pays for no chapter. A repair with
+		// no misses on record is the rewrite.
+		base, _ := repairBase(ex.Unit)
+		target := base
+		build := func() (*render.Chapter, error) {
+			return s.buildChapter(sub, base, remediationSummary(sub, base))
+		}
+		if _, missed, _ := sub.Learner.LastCheck(base); ex.Repair && len(missed) > 0 {
+			target = base + repairSuffix
+			build = func() (*render.Chapter, error) { return s.buildRepair(sub, base) }
+		}
 		if asyncAuthor {
-			s.buildAsync(sub, ex.Unit, remSummary)
-			authoring = ex.Unit
-		} else if ch, err := s.buildChapter(sub, ex.Unit, remSummary); err == nil {
+			s.buildAsyncWith(sub, target, build)
+			authoring = target
+		} else if ch, err := build(); err == nil {
 			chapter = ch
 		} else {
-			log.Printf("build remediation %s: %v", ex.Unit, err)
+			log.Printf("build %s: %v", target, err)
 		}
 	}
 
@@ -862,6 +1002,7 @@ func (s *Server) buildResultsDoc(sub *Subject, ex Exchange, results []Result, ga
 		respByID[r.ItemID] = r
 	}
 	nByID := map[string]int{}
+	base, isRepair := repairBase(ex.Unit)
 	title := ex.Unit
 	if ch, err := loadChapter(sub, ex.Unit); err == nil {
 		title = ch.Title
@@ -890,17 +1031,24 @@ func (s *Server) buildResultsDoc(sub *Subject, ex Exchange, results []Result, ga
 		doc.Action = "Begin chapter 1"
 		doc.Dek = "A measurement, not a verdict - the chapters ahead are shaped by where the sure answers stopped."
 	case gate.Passed:
-		doc.HeadLeft = pages.HeadLeft(ex.Unit, title)
+		doc.HeadLeft = pages.HeadLeft(base, title)
 		doc.Action = "Next chapter"
-		if gate.ExtensionUnlocked {
+		switch {
+		case isRepair:
+			doc.Dek = "The misses are closed. The next chapter builds on what held."
+		case gate.ExtensionUnlocked:
 			doc.Dek = "Cleared with room to spare - an extension section is unlocked in the next chapter."
-		} else {
+		default:
 			doc.Dek = "The next chapter builds on what held. The misses below are worth a minute before moving on."
 		}
 	default:
-		doc.HeadLeft = pages.HeadLeft(ex.Unit, title)
+		doc.HeadLeft = pages.HeadLeft(base, title)
 		doc.Action = "Back to the chapter"
-		doc.Dek = "Not yet - the chapter returns from a different angle. The reveals below are the map."
+		if isRepair {
+			doc.Dek = "Still short. Take the remaining misses again, the whole chapter from a different angle, or move on with the debt."
+		} else {
+			doc.Dek = "Not yet. Take just the misses in a short chapter, the whole chapter from a different angle, or move on with the debt. The reveals below are the map."
+		}
 	}
 
 	// What the reader flagged during the check, the latest word per item.
@@ -959,13 +1107,21 @@ func (s *Server) buildResultsDoc(sub *Subject, ex Exchange, results []Result, ga
 // persistence + eager page render. Failures land in the subject's build
 // status for the pages meta to surface.
 func (s *Server) buildAsync(sub *Subject, unitID, checkSummary string) {
+	s.buildAsyncWith(sub, unitID, func() (*render.Chapter, error) {
+		return s.buildChapter(sub, unitID, checkSummary)
+	})
+}
+
+// buildAsyncWith runs build in the background and delivers its chapter
+// the same way; unitID names it in the log.
+func (s *Server) buildAsyncWith(sub *Subject, unitID string, build func() (*render.Chapter, error)) {
 	if !sub.beginBuild() {
 		return
 	}
 	s.renders.Add(1)
 	go func() {
 		defer s.renders.Done()
-		ch, err := s.buildChapter(sub, unitID, checkSummary)
+		ch, err := build()
 		if err != nil {
 			log.Printf("async build %s: %v", unitID, err)
 			sub.endBuild(err.Error())

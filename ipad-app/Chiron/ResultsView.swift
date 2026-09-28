@@ -76,12 +76,14 @@ struct ResultsView: View {
     }
 
     @ViewBuilder private var gateActions: some View {
-        Button("Explain it differently") { Task { await session.proceed() } }
+        Button("Just the misses") { Task { await session.repair() } }
             .buttonStyle(.borderedProminent)
             .keyboardShortcut(.defaultAction)
+        Button("Explain it differently") { Task { await session.remediate() } }
+            .buttonStyle(.bordered)
         Button("Override and continue anyway") { Task { await session.override() } }
             .buttonStyle(.bordered).tint(.orange)
-        Text("Overridden material lands in your debt; \"Catch me up\" collects it later.")
+        Text("Just the misses is a short chapter on what was missed, then those questions again. Overridden material lands in your debt; \"Catch me up\" collects it later.")
             .font(.footnote).foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
     }

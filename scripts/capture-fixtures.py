@@ -41,7 +41,8 @@ def walk(subject, save_as):
     chapter = status['chapter']; assert chapter and chapter['unit'] == graded['authoring'], status
     if save_as: save('chapter', status)
     # A teaching chapter failed outright, after a long chunk: a failing gate
-    # with remediation authoring and a break suggestion in one response.
+    # and a break suggestion in one response, and nothing authoring - after
+    # a failed gate the reader chooses (repair, remediate or override) first.
     wrong = []
     for it in chapter['check']:
         if it['kind'] == 'mcq':

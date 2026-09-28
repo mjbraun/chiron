@@ -64,8 +64,10 @@ symptom, the cause, what to do. Add to it in the same commit as the fix.
 ## Server and sprite
 
 - **Finishing a pretest went back to its first question (2026-09-27).**
-  After a failed gate the remediation chapter authors in the background
-  and the app keeps a note of it; the reader took the suggested break,
+  After a failed gate the remediation chapter authored in the background
+  (since 2026-09-28 nothing is written until the reader chooses: the
+  misses alone, the whole chapter again, or override) and the app keeps
+  a note of it; the reader took the suggested break,
   and the break report came back with a chapter, because a boundary
   exchange with nothing to grade advanced to the fringe unit and built it
   synchronously (three minutes of model time, and it replaced the

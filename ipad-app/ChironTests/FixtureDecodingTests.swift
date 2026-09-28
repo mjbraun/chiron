@@ -78,12 +78,13 @@ final class FixtureDecodingTests: XCTestCase {
         }
     }
 
-    func testFailedGateCarriesRemediationAndABreak() throws {
+    func testFailedGateCarriesTheChoicesAndABreak() throws {
         let r = try decode(ExchangeResponse.self, "exchange-fail")
         let gate = try XCTUnwrap(r.gate)
         XCTAssertFalse(gate.passed)
         XCTAssertNil(r.chapter)
-        XCTAssertEqual(r.authoring, "u1", "remediation rewrites the same unit")
+        XCTAssertNil(r.authoring, "nothing is written until the reader chooses")
+        XCTAssertTrue(try XCTUnwrap(r.resultsDoc).dek.contains("misses"), "the results offer the misses")
         let doc = try XCTUnwrap(r.resultsDoc)
         XCTAssertTrue(doc.headline.hasPrefix("Below the gate"))
         XCTAssertFalse(doc.isCalibration)

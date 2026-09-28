@@ -27,8 +27,8 @@ enum SelfTest {
     }
 
     /// Answer everything wrong, to exercise the path that actually matters
-    /// pedagogically: gate failure, grader diagnosis, and the remediation
-    /// chapter. `simctl launch <dev> <id> selftestweak`.
+    /// pedagogically: gate failure, grader diagnosis, and the repair
+    /// chapter on the misses. `simctl launch <dev> <id> selftestweak`.
     static var weakRequested: Bool {
         CommandLine.arguments.contains("selftestweak")
     }
@@ -102,7 +102,13 @@ enum SelfTest {
             case .results(let doc, let gate):
                 let pct = Int((gate.score ?? 0) * 100)
                 say("GATE score=\(pct)% passed=\(gate.passed) calibration=\(gate.calibration == true) entries=\(doc.entries.count) headline=\(doc.headline)")
-                await session.proceed()
+                if gate.passed || doc.isCalibration {
+                    await session.proceed()
+                } else {
+                    // Nothing is written after a failed gate until the
+                    // reader chooses; the walk chooses the misses alone.
+                    await session.repair()
+                }
                 if case .takingBreak(let b) = session.screen {
                     say("BREAK minutes=\(b.minutes) kind=\(b.kind)")
                     await session.breakFinished(minutes: 0.1)

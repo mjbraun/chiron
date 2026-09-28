@@ -293,7 +293,7 @@ final class BookSession: ObservableObject {
         // the server does not have this unit in progress, the cached chapter is
         // stale and goes.
         if let ch = chapter, ch.unit != "catchup" {
-            let known = st.spine.first { $0.unit == ch.unit }
+            let known = st.spine.first { $0.unit == ch.baseUnit }
             let inProgress = known?.status == "active" || known?.inFringe == true
             if !inProgress {
                 chapter = nil
@@ -505,6 +505,24 @@ final class BookSession: ObservableObject {
         } else {
             await start()
         }
+    }
+
+    /// Below the gate, the misses alone: a short chapter on what was
+    /// missed, then those items again, scored as the whole check. Nothing
+    /// starts over and nothing goes into debt.
+    func repair() async {
+        var req = ExchangeRequest(subject: subjectID, unit: chapter?.unit)
+        req.repair = true
+        pendingAuthoring = nil
+        await run(req, wait: .opening)
+    }
+
+    /// Below the gate, the whole chapter again from a different angle.
+    func remediate() async {
+        var req = ExchangeRequest(subject: subjectID, unit: chapter?.unit)
+        req.remediate = true
+        pendingAuthoring = nil
+        await run(req, wait: .opening)
     }
 
     /// Below the gate, take the material anyway: the debt is recorded and the

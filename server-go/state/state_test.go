@@ -350,3 +350,33 @@ func TestFlaggedItemsAreKeptPerUnit(t *testing.T) {
 		t.Fatalf("after reload, flags = %+v", got)
 	}
 }
+
+// A check result keeps which items were missed and how many there were, so
+// a failed gate can be repaired on the misses alone: a short chapter on
+// them, then those items again, scored against the whole check.
+func TestCheckResultKeepsTheMisses(t *testing.T) {
+	l := newLearner(t)
+	if _, err := l.Apply(Event{Kind: "check_result", Unit: "u1", Score: f64(0.4), Passed: b(false),
+		ItemsMissed: []string{"u1-q2", "u1-q3", "u1-q5"}, Items: 5}); err != nil {
+		t.Fatal(err)
+	}
+	u := l.Snapshot().Units["u1"]
+	if got := u.Missed; len(got) != 3 || got[0] != "u1-q2" || got[2] != "u1-q5" {
+		t.Errorf("missed after the check: %v", got)
+	}
+	if u.Items != 5 {
+		t.Errorf("items after the check: %d, want 5", u.Items)
+	}
+	// The repair round closes two of the three; the record follows.
+	if _, err := l.Apply(Event{Kind: "check_result", Unit: "u1", Score: f64(0.8), Passed: b(true),
+		ItemsMissed: []string{"u1-q3"}, Items: 5}); err != nil {
+		t.Fatal(err)
+	}
+	u = l.Snapshot().Units["u1"]
+	if got := u.Missed; len(got) != 1 || got[0] != "u1-q3" {
+		t.Errorf("missed after the repair: %v", got)
+	}
+	if l.UnitStatus("u1") != "passed" {
+		t.Errorf("status after the repair: %s", l.UnitStatus("u1"))
+	}
+}

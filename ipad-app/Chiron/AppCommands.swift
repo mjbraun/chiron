@@ -359,6 +359,10 @@ enum AppCommands {
             }
         case "override":
             await session.override()
+        case "repair":
+            await session.repair()
+        case "remediate":
+            await session.remediate()
         case "reset":
             await session.startOver()
         case "retry":

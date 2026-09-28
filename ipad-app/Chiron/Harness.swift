@@ -33,6 +33,8 @@ import Network
 ///                            mixed inks one item, passes on one, types the rest)
 ///   POST /proceed            leave the results (or the break)
 ///   POST /override           override a failed gate
+///   POST /repair             below the gate: a short chapter on the misses, then those items again
+///   POST /remediate          below the gate: the whole chapter again from a different angle
 ///   POST /reset              start the book over
 ///   POST /retry              the error screen's Try again
 ///   POST /server {url, key, name}  save and select a server (the shell needs one)

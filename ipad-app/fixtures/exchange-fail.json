@@ -1,5 +1,4 @@
 {
- "authoring": "u1",
  "break_suggestion": {
   "kind": "short",
   "minutes": 5,
@@ -97,7 +96,7 @@
  ],
  "results_doc": {
   "action": "Back to the chapter",
-  "dek": "Not yet - the chapter returns from a different angle. The reveals below are the map.",
+  "dek": "Not yet. Take just the misses in a short chapter, the whole chapter from a different angle, or move on with the debt. The reveals below are the map.",
   "entries": [
    {
     "answer": "The gap: the coding theorem constrains the LIMIT. A predictor at the\nentropy floor must have captured the generating structure. It says nothing\nabout what a specific architecture, trained with a specific optimizer on a\nfinite budget, has at its actually-achieved loss. At intermediate loss a\nlarge collection of shallow heuristics that each cover most of a pattern\nlowers the bill substantially while implementing no mechanism at all. The\ntheorem gives no bound on how much of the achieved compression came from\nmechanism versus heuristic.\n\nEmpirical demonstration, any one: multi-digit arithmetic that is accurate\non operand magnitudes common in the corpus and degrades on rare ones - a\nreal addition mechanism has no frequency dependence. Or a reasoning\nproblem solved reliably in its textbook phrasing and failed when the\nvariable names or surface framing change - a real mechanism is invariant\nto renaming.\n",

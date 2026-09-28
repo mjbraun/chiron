@@ -374,13 +374,26 @@ final class BookSessionTests: XCTestCase {
         XCTAssertFalse(session().breakTime)
     }
 
-    func testBelowTheGateOffersTheBreakThenRemediationOrOverride() async {
+    /// Below the gate nothing is written until the reader chooses. Each
+    /// choice is its own exchange; the suggested break comes first, and
+    /// the chapter the choice asked for follows it.
+    func testBelowTheGateOffersTheMissesTheRewriteOrOverride() async {
         scriptFreshBook()
+        let state = fixture(BookState.self, "state")
+        var promised = ""
         fake.onExchange = { [unowned self] req in
             if req.phase == "start" { return self.deliversU1() }
             if req.override { return self.fixture(ExchangeResponse.self, "exchange-screener") }
+            if req.repair || req.remediate {
+                promised = req.repair ? "u1.repair" : "u1"
+                return ExchangeResponse(results: [], gate: nil, chapter: nil, state: state,
+                                        breakSuggestion: nil, authoring: promised, resultsDoc: nil)
+            }
             if req.breakMinutes != nil { return self.deliversNothing() }
             return self.fixture(ExchangeResponse.self, "exchange-fail")
+        }
+        fake.onChapter = { [unowned self] _ in
+            ChapterStatus(chapter: self.chapterPayload(promised, "Tokens"), authoring: false, authoringError: "")
         }
         let s = session()
         s.breakTime = true
@@ -390,15 +403,26 @@ final class BookSessionTests: XCTestCase {
         guard case .results(let doc, let gate) = s.screen else { return XCTFail("\(s.screen)") }
         XCTAssertFalse(gate.passed)
         XCTAssertTrue(doc.headline.hasPrefix("Below the gate"))
+        XCTAssertFalse(fake.exchanges.contains { $0.repair || $0.remediate }, "no chapter asked for before the choice")
 
-        // Leaving the results takes the suggested break first.
-        await s.proceed()
+        // The misses alone: the exchange carries the flag, the break comes
+        // first, then the repair chapter it is writing.
+        await s.repair()
+        XCTAssertEqual(fake.exchanges.last?.repair, true)
+        XCTAssertEqual(fake.exchanges.last?.unit, "u1")
         guard case .takingBreak(let b) = s.screen else { return XCTFail("\(s.screen)") }
         XCTAssertEqual(b.kind, "short")
-
-        // After the break, the remediation chapter that was authoring.
         await s.breakFinished(minutes: 5)
         XCTAssertTrue(fake.exchanges.contains { $0.breakMinutes != nil }, "the break was reported")
+        guard case .reading = s.screen else { return XCTFail("\(s.screen)") }
+        XCTAssertEqual(s.chapter?.unit, "u1.repair")
+
+        // The whole chapter again instead: the same shape, for the rewrite.
+        await s.submitCheck([ItemResponse(itemId: "u1-q1", response: "wrong", selectedIndex: nil, confidence: 4)])
+        await s.remediate()
+        XCTAssertEqual(fake.exchanges.last?.remediate, true)
+        guard case .takingBreak = s.screen else { return XCTFail("\(s.screen)") }
+        await s.breakFinished(minutes: 5)
         guard case .reading = s.screen else { return XCTFail("\(s.screen)") }
         XCTAssertEqual(s.chapter?.unit, "u1")
 
@@ -750,6 +774,40 @@ final class BookSessionTests: XCTestCase {
         guard case .reading = s2.screen else { return XCTFail("\(s2.screen)") }
         XCTAssertEqual(starts, 2, "the reopen asked the server to write the chapter again")
         XCTAssertEqual(s2.chapter?.unit, "u1")
+    }
+
+    /// A repair chapter is cached under its own id, which is on no spine;
+    /// the unit it repairs is the one in progress. A reopen that cannot
+    /// reach the server's copy must keep it, not start the unit afresh.
+    func testACachedRepairChapterSurvivesAReopen() async {
+        scriptFreshBook()
+        let state = fixture(BookState.self, "state")
+        var starts = 0
+        fake.onExchange = { [unowned self] req in
+            if req.phase == "start" { starts += 1; return self.deliversU1() }
+            if req.repair {
+                return ExchangeResponse(results: [], gate: nil, chapter: nil, state: state,
+                                        breakSuggestion: nil, authoring: "u1.repair", resultsDoc: nil)
+            }
+            return self.fixture(ExchangeResponse.self, "exchange-fail")
+        }
+        fake.onChapter = { [unowned self] _ in
+            ChapterStatus(chapter: self.chapterPayload("u1.repair", "The misses: Tokens"), authoring: false, authoringError: "")
+        }
+        let s = session()
+        await s.open()
+        await s.submitCheck([ItemResponse(itemId: "u1-q1", response: "wrong", selectedIndex: nil, confidence: 4)])
+        await s.repair()
+        guard case .reading = s.screen else { return XCTFail("\(s.screen)") }
+        XCTAssertEqual(s.chapter?.unit, "u1.repair")
+        XCTAssertEqual(s.chapter?.baseUnit, "u1")
+        s.persist()
+
+        fake.onChapter = { _ in throw URLError(.cannotConnectToHost) }
+        let s2 = session()
+        await s2.open()
+        XCTAssertEqual(s2.chapter?.unit, "u1.repair", "the repair chapter in hand was dropped")
+        XCTAssertEqual(starts, 1, "the reopen started the unit afresh")
     }
 
     func testMarksAndInkBelongToTheChapterAndSurviveRelaunch() async {
