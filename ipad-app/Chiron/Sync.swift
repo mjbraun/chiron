@@ -53,6 +53,7 @@ protocol ChironService: AnyObject {
     func requestChange(text: String, state: [String: Any], screenshotPNG: Data?) async throws -> ChangeRequest
     func changeRequests() async throws -> [ChangeRequest]
     func answerRequest(id: String, answer: String) async throws -> ChangeRequest
+    func alerts(since: String?) async throws -> [MachineAlert]
 }
 
 enum ServiceError: Error {
@@ -369,6 +370,12 @@ final class Sync: ObservableObject, ChironService {
 
     func changeRequests() async throws -> [ChangeRequest] {
         try await get("/dev/requests", timeout: 10)
+    }
+
+    func alerts(since: String?) async throws -> [MachineAlert] {
+        var parts = URLComponents()
+        if let since { parts.queryItems = [URLQueryItem(name: "since", value: since)] }
+        return try await get("/alerts" + (parts.string ?? ""), timeout: 10)
     }
 
     func answerRequest(id: String, answer: String) async throws -> ChangeRequest {

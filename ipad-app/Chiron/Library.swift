@@ -154,6 +154,20 @@ final class Library: ObservableObject {
         watchRequests()
     }
 
+    /// What machines behind the book posted since the last look, each a
+    /// notice once. A device's first look only marks the place: what was
+    /// posted before it ever looked is not news.
+    func checkAlerts() async {
+        let seen = defaults.string(forKey: "alertsSeen")
+        guard let list = try? await service.alerts(since: seen), let newest = list.last else { return }
+        if seen != nil {
+            for a in list {
+                notices.notify(id: "alert-\(a.at)", title: a.text, body: "from \(a.source)")
+            }
+        }
+        defaults.set(newest.at, forKey: "alertsSeen")
+    }
+
     /// Requests the agent stopped on, waiting for the reader's answer.
     var waitingOnReader: Int { requests.filter(\.waiting).count }
 
@@ -225,17 +239,17 @@ final class Library: ObservableObject {
     /// background, so a notice can reach the reader in another app.
     nonisolated static let backgroundCheckID = "dev.mjbraun.chiron.check"
 
-    /// Ask for a look at the shelf while the app is away, when there is
-    /// something to look for. The system decides when, if at all.
+    /// Ask for a look at the shelf while the app is away: soon while
+    /// something is awaited, and now and then otherwise, for the alerts a
+    /// machine behind the book may post. The system decides when, if at all.
     func scheduleBackgroundCheck() {
-        guard awaiting else { return }
         let request = BGAppRefreshTaskRequest(identifier: Self.backgroundCheckID)
-        request.earliestBeginDate = Date().addingTimeInterval(60)
+        request.earliestBeginDate = Date().addingTimeInterval(awaiting ? 60 : 15 * 60)
         try? BGTaskScheduler.shared.submit(request)
     }
 
-    /// The look itself: the shelf and the requests, then another look
-    /// asked for if there is still something to wait on.
+    /// The look itself: the shelf, the requests and the alerts, then the
+    /// next look asked for.
     func backgroundCheck() async {
         await refresh()
         await refreshRequests()
@@ -304,6 +318,7 @@ final class Library: ObservableObject {
             // The server is back: whatever was marked up while it was away goes up.
             await session?.pushAnnotations()
             await checkForBuild()
+            await checkAlerts()
             checkFeeds()
         } catch {
             shelfError = subjects.isEmpty ? BookSession.unreachable : Library.offline

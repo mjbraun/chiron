@@ -196,6 +196,8 @@ type Server struct {
 	// the reader opens it, and they would otherwise take the same post
 	// twice.
 	feedMu sync.Mutex
+	// One writer of the alerts file at a time.
+	alertMu sync.Mutex
 
 	// The book the reader last had open, so the client can reopen on it.
 	// Persisted beside the subject state dirs: the client has no writable
@@ -434,6 +436,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /dev/requests", s.handleRequestList)
 	mux.HandleFunc("GET /dev/requests/{id}", s.handleRequestGet)
 	mux.HandleFunc("POST /dev/requests/{id}/answer", s.handleRequestAnswer)
+	mux.HandleFunc("POST /alerts", s.handleAlertPost)
+	mux.HandleFunc("GET /alerts", s.handleAlertList)
 	mux.HandleFunc("GET /builds/latest", s.handleBuildLatest)
 	mux.HandleFunc("GET /builds/{token}/{file}", s.handleBuildFile)
 	mux.HandleFunc("GET /documents/{doc}", s.handleDocumentGet)

@@ -844,6 +844,15 @@ struct AppBuild: Codable, Equatable {
 
 /// A change asked of the development agent on the sprite, and what it
 /// has done about it so far (SPRITE-DEV-PLAN.md phase G).
+/// Something a machine behind the book posted for the reader, such as the
+/// build Mac gone onto battery.
+struct MachineAlert: Codable, Equatable {
+    var source: String
+    var text: String
+    /// When the server took it (RFC3339), and where the next look starts.
+    var at: String
+}
+
 struct ChangeRequest: Codable, Identifiable, Equatable {
     var id: String
     var text: String

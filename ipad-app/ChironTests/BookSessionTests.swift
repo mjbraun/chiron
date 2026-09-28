@@ -62,6 +62,7 @@ final class FakeService: ChironService {
     var onRequestChange: (String, [String: Any], Data?) throws -> ChangeRequest = { _, _, _ in throw URLError(.cannotConnectToHost) }
     var onChangeRequests: () throws -> [ChangeRequest] = { [] }
     var answers: [(id: String, answer: String)] = []
+    var onAlerts: (String?) throws -> [MachineAlert] = { _ in [] }
     var onAnswerRequest: (String, String) throws -> ChangeRequest = { id, _ in
         ChangeRequest(id: id, text: "", status: "queued", createdAt: "", log: [], last: nil, summary: nil, reason: nil, commit: nil, build: nil)
     }
@@ -174,6 +175,7 @@ final class FakeService: ChironService {
         return try onRequestChange(text, state, screenshotPNG)
     }
     func changeRequests() async throws -> [ChangeRequest] { try onChangeRequests() }
+    func alerts(since: String?) async throws -> [MachineAlert] { try onAlerts(since) }
     func answerRequest(id: String, answer: String) async throws -> ChangeRequest {
         let r = try onAnswerRequest(id, answer)
         answers.append((id, answer))

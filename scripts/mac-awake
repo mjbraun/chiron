@@ -24,12 +24,47 @@ lid_setting() {
 
 say() { echo "$(date -u +%FT%TZ) $*"; }
 
+# Whether a change of source is worth telling the reader: only coming off
+# the charger, which means the lid will sleep this Mac and it drops off
+# the network until someone plugs it back in.
+alerts_on() { # <was> <now>
+  [ "$1" = 1 ] && [ "$2" = 0 ] && echo 1
+}
+
+# Where alerts go: a file of url=, key= and name= lines, readable by its
+# owner alone (root reads it too). No file, no alerts.
+ALERT_CONF=${ALERT_CONF:-/usr/local/etc/chiron-awake.conf}
+
+# Post a line to the book's alerts. The key goes to curl on its stdin, so
+# it is never in an argument list that ps shows.
+alert() { # <text>
+  [ -r "$ALERT_CONF" ] || return 0
+  local url key
+  url=$(sed -n 's/^url=//p' "$ALERT_CONF" | head -1)
+  key=$(sed -n 's/^key=//p' "$ALERT_CONF" | head -1)
+  [ -n "$url" ] && [ -n "$key" ] || return 0
+  printf 'header = "Authorization: Bearer %s"\n' "$key" |
+    curl -s -m 10 -o /dev/null -K - -X POST "$url/alerts" \
+      -H 'Content-Type: application/json' \
+      --data "{\"source\":\"$(hostname -s)\",\"text\":\"$1\"}" ||
+    say "could not send the alert"
+}
+
+alert_name() { sed -n 's/^name=//p' "$ALERT_CONF" 2>/dev/null | head -1; }
+
 # Sourced by its test, which wants the functions and not the loop.
 [ "${MAC_AWAKE_LIB:-}" = 1 ] && return 0
 
+was=""
 pmset -g pslog | while IFS= read -r line; do
   want=$(lid_setting "$line")
   [ -n "$want" ] || continue
+  # Said before the lid is let sleep it, while the network is still up.
+  if [ -n "$(alerts_on "$was" "$want")" ]; then
+    name=$(alert_name); name=${name:-$(hostname -s)}
+    alert "$name is on battery: with its lid shut it will sleep and drop off the network until it is plugged in."
+  fi
+  was=$want
   if pmset -a disablesleep "$want"; then
     [ "$want" = 1 ] && say "on power: the lid no longer sleeps this Mac" \
                     || say "on battery: the lid sleeps this Mac again"
