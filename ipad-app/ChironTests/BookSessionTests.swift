@@ -41,6 +41,8 @@ final class FakeService: ChironService {
     var inks: [InkSubmission] = []
     var asks: [(unit: String, quote: String, question: String)] = []
     var histories: [[QA]] = []
+    var flags: [(unit: String, item: String, text: String, response: ItemResponse?)] = []
+    var onFlag: (String, String, String) throws -> FlagResponse = { unit, item, _ in FlagResponse(unit: unit, item: item, n: 1) }
     var chapterPolls = 0
     var onUploadDocument: (String, Int, Data) throws -> Document = { title, pages, _ in Document(id: "doc-\(title)", title: title, pages: pages) }
     var onDocumentData: (String) throws -> Data = { _ in throw URLError(.cannotConnectToHost) }
@@ -87,6 +89,10 @@ final class FakeService: ChironService {
         asks.append((unit, quote, question))
         histories.append(history)
         return try onAsk(unit, quote, question)
+    }
+    func flag(subject: String, unit: String, item: String, text: String, response: ItemResponse?) async throws -> FlagResponse {
+        flags.append((unit, item, text, response))
+        return try onFlag(unit, item, text)
     }
     func reset(subject: String) async throws -> BookState { try onReset(subject) }
     func capture(_ request: CaptureRequest) async throws -> CaptureResponse {
@@ -1063,5 +1069,57 @@ final class AskThreadTests: XCTestCase {
         s.deleteAsking()
         XCTAssertNil(s.asking)
         XCTAssertTrue(s.marks.isEmpty, "delete removes the question and its highlight")
+    }
+}
+
+/// A flag on an item goes to the server on its own, with the item, the
+/// concern and the answer given, and the item shows as flagged from then
+/// on; a server out of reach marks nothing and says so.
+@MainActor
+final class FlagTests: XCTestCase {
+    private func session(_ fake: FakeService) -> BookSession {
+        let storage = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let s = BookSession(subjectID: "ai", title: "AI", service: fake, storage: storage)
+        let json = #"{"unit":"u1","title":"T","minutes":1,"html":"<p>x</p>","beats":[],"pretest":[],"check":[{"id":"u1-q1","kind":"constructed","prompt":"How many hours?","check":"numeric"},{"id":"u1-q2","kind":"mcq","prompt":"Which?","check":"choice","options":[{"text":"a"},{"text":"b"}]}],"next_action":"read"}"#
+        s.setChapterForTesting(try! JSONDecoder().decode(ChapterPayload.self, from: Data(json.utf8)))
+        return s
+    }
+
+    func testFlaggingSendsTheConcernWithTheAnswerAndMarksTheItem() async throws {
+        let fake = FakeService()
+        let s = session(fake)
+        let item = s.chapter!.check[0]
+        let given = ItemResponse(itemId: "u1-q1", response: "0", selectedIndex: nil, confidence: 3)
+        try await s.flag(item: item, concern: "  the key would have been rotated at 16:00  ", response: given)
+        XCTAssertEqual(fake.flags.count, 1)
+        XCTAssertEqual(fake.flags.first?.unit, "u1")
+        XCTAssertEqual(fake.flags.first?.item, "u1-q1")
+        XCTAssertEqual(fake.flags.first?.text, "the key would have been rotated at 16:00")
+        XCTAssertEqual(fake.flags.first?.response?.response, "0")
+        XCTAssertEqual(s.flagged, ["u1-q1"])
+
+        // Before any answer the flag travels without one.
+        try await s.flag(item: s.chapter!.check[1], concern: "both b and a are right", response: nil)
+        XCTAssertNil(fake.flags.last?.response)
+        XCTAssertEqual(s.flagged, ["u1-q1", "u1-q2"])
+    }
+
+    func testAnEmptyConcernIsNotSent() async throws {
+        let fake = FakeService()
+        let s = session(fake)
+        try await s.flag(item: s.chapter!.check[0], concern: "   ", response: nil)
+        XCTAssertTrue(fake.flags.isEmpty)
+        XCTAssertTrue(s.flagged.isEmpty)
+    }
+
+    func testAServerOutOfReachMarksNothing() async {
+        let fake = FakeService()
+        fake.onFlag = { _, _, _ in throw URLError(.cannotConnectToHost) }
+        let s = session(fake)
+        do {
+            try await s.flag(item: s.chapter!.check[0], concern: "wrong", response: nil)
+            XCTFail("a failed flag did not throw")
+        } catch {}
+        XCTAssertTrue(s.flagged.isEmpty)
     }
 }

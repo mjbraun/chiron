@@ -556,13 +556,15 @@ struct ResultsEntry: Codable, Identifiable {
     let chose: String?
     let answer: String?
     let why: String?
+    /// The reader's concern, if they flagged the item during the check.
+    let flag: String?
 
     var id: Int { n }
     var isIDK: Bool { idk == true }
     var passed: Bool { verdict == "pass" || verdict == "valid_alternative_path" }
 
     enum CodingKeys: String, CodingKey {
-        case n, verdict, idk, kind, prompt, confidence, chose, answer, why
+        case n, verdict, idk, kind, prompt, confidence, chose, answer, why, flag
         case readAs = "read_as"
     }
 }
@@ -683,6 +685,14 @@ struct AskResponse: Codable {
         case unit
         case answerMd = "answer_md"
     }
+}
+
+/// The server's word that a flag is on record: the item, its unit, and
+/// the flag's place in the learner's log.
+struct FlagResponse: Codable {
+    let unit: String
+    let item: String
+    let n: Int
 }
 
 /// A mark on the page: a run of the chapter's text, by character offsets

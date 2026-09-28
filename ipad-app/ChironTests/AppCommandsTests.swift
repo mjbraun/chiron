@@ -46,6 +46,28 @@ final class AppCommandsTests: XCTestCase {
         XCTAssertFalse(library.breakTime)
     }
 
+    /// The flag verb flags the item named, or the first of the check, and
+    /// the state lists what is flagged.
+    func testFlagVerbFlagsAnItemOfTheChapter() async throws {
+        let fake = FakeService()
+        let storage = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let s = BookSession(subjectID: "ai", title: "How AI Works", service: fake, storage: storage)
+        let json = #"{"unit":"u1","title":"T","minutes":1,"html":"<p>x</p>","beats":[],"pretest":[{"id":"u1-p1","kind":"mcq","prompt":"P?","check":"choice","options":[{"text":"a"}]}],"check":[{"id":"u1-q1","kind":"constructed","prompt":"Q?","check":"numeric"}],"next_action":"read"}"#
+        s.setChapterForTesting(try JSONDecoder().decode(ChapterPayload.self, from: Data(json.utf8)))
+
+        try await AppCommands.run("flag", args: ["text": "the answer is wrong"], session: s, llm: false)
+        XCTAssertEqual(fake.flags.first?.item, "u1-p1")
+        XCTAssertEqual(fake.flags.first?.text, "the answer is wrong")
+        try await AppCommands.run("flag", args: ["text": "so is this", "item": "u1-q1"], session: s, llm: false)
+        XCTAssertEqual(fake.flags.last?.item, "u1-q1")
+        XCTAssertEqual(s.flagged, ["u1-p1", "u1-q1"])
+        do {
+            try await AppCommands.run("flag", args: ["text": "x", "item": "u9-q9"], session: s, llm: false)
+            XCTFail("flagged an item the chapter does not have")
+        } catch AppCommands.Failure.badArguments {
+        }
+    }
+
     func testUnknownVerbIsRefused() async {
         let s = session()
         do {

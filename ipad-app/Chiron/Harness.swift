@@ -21,6 +21,7 @@ import Network
 ///   POST /tool {tool}        pick a palette tool: none | pen | highlighter | ask | eraser
 ///   POST /mark {text, kind}  highlight the first occurrence of text (kind: highlight | question)
 ///   POST /ask {text, question}  mark text as a question and ask it
+///   POST /flag {text, item}  flag an item as wrong, with the concern (item: an id; default the first of the check)
 ///   POST /close              close the ask card (the mark and its badge stay)
 ///   POST /delete             delete the question in hand with its highlight
 ///   POST /mark/rect {id}     where a mark's badge is, in page-view points

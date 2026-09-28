@@ -106,6 +106,9 @@ final class BookSession: ObservableObject {
     }
     /// A question being asked or answered, shown in the ask card.
     @Published var asking: Asking?
+    /// Items the reader has flagged as wrong, by id. The server keeps the
+    /// concern; this is what the check shows as done.
+    @Published private(set) var flagged: Set<String> = []
     /// The device's own model, asked only when the tutor cannot be
     /// reached. The library sets it; a session made bare has none, so a
     /// test's "tutor away" is the same on a Mac with a model and without.
@@ -748,6 +751,18 @@ final class BookSession: ObservableObject {
         // The tool goes down with the card: leaving it up turns the next
         // drag, which the reader means as a scroll, into another highlight.
         if tool == .ask || tool == .note { tool = .none }
+    }
+
+    /// The reader thinks an item, its reference answer or its grading is
+    /// wrong. The concern goes to the server at once rather than with the
+    /// check, so a check left unfinished still leaves it on record;
+    /// `response` is what they answered, if they had. Throws when the
+    /// server cannot be reached, and marks nothing then.
+    func flag(item: CheckItem, concern: String, response: ItemResponse?) async throws {
+        let text = concern.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, let unit = item.unit ?? chapter?.unit else { return }
+        _ = try await service.flag(subject: subjectID, unit: unit, item: item.id, text: text, response: response)
+        flagged.insert(item.id)
     }
 
     /// Send the question with its passage; the answer lands on the mark. A

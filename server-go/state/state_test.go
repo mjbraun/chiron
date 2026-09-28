@@ -318,3 +318,35 @@ func TestAskedQuestionsAreKeptPerUnit(t *testing.T) {
 		t.Fatalf("after reload, questions = %+v", got)
 	}
 }
+
+// A question or its reference answer the reader thinks is wrong is part of
+// the state: the flag names the item, keeps the reader's answer and the
+// reference as they were, and survives a restart like everything else.
+func TestFlaggedItemsAreKeptPerUnit(t *testing.T) {
+	l := newLearner(t)
+	for _, f := range []struct{ unit, item, concern, answer, reference string }{
+		{"u1", "u1-q1", "the key would have been rotated at 16:00", "0", "6.75"},
+		{"u1", "u1-q2", "two options are both right", "B", "C"},
+		{"u2", "u2-q1", "the prompt contradicts the chapter", "", "x"},
+	} {
+		if _, err := l.Apply(Event{Kind: "flagged", Unit: f.unit, Item: f.item, Text: f.concern, Evidence: f.answer, Why: f.reference}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got := l.Flags("u1")
+	if len(got) != 2 || got[0].Item != "u1-q1" || got[0].Concern != "the key would have been rotated at 16:00" ||
+		got[0].Answer != "0" || got[0].Reference != "6.75" || got[0].TS == 0 {
+		t.Fatalf("u1 flags = %+v", got)
+	}
+	if got := l.Flags(""); len(got) != 3 || got[2].Unit != "u2" {
+		t.Fatalf("all flags = %+v", got)
+	}
+
+	l2, err := Open(l.dir, l.corpus)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := l2.Flags(""); len(got) != 3 || got[1].Item != "u1-q2" {
+		t.Fatalf("after reload, flags = %+v", got)
+	}
+}

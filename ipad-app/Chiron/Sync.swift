@@ -13,6 +13,9 @@ protocol ChironService: AnyObject {
     func exchange(_ request: ExchangeRequest) async throws -> ExchangeResponse
     func ink(subject: String, _ submission: InkSubmission) async throws -> ExchangeResponse
     func ask(subject: String, unit: String, quote: String, question: String, history: [QA]) async throws -> AskResponse
+    /// The reader thinks an item, its reference answer or its grading is
+    /// wrong; `response` is what they answered, if they had.
+    func flag(subject: String, unit: String, item: String, text: String, response: ItemResponse?) async throws -> FlagResponse
     func capture(_ request: CaptureRequest) async throws -> CaptureResponse
     func plan(subject: String) async throws -> PlanState
     func planTurn(subject: String, text: String) async throws -> CaptureResponse
@@ -150,6 +153,29 @@ final class Sync: ObservableObject, ChironService {
         return try await post("/ask/\(subject)",
                               body: try JSONEncoder().encode(Body(unit: unit, quote: quote, question: question, history: history)),
                               timeout: 120)
+    }
+
+    func flag(subject: String, unit: String, item: String, text: String, response: ItemResponse?) async throws -> FlagResponse {
+        struct Body: Encodable {
+            let unit, item, text: String
+            var answer: String?
+            var selectedIndex: Int?
+            var idk: Bool?
+
+            enum CodingKeys: String, CodingKey {
+                case unit, item, text, answer, idk
+                case selectedIndex = "selected_index"
+            }
+        }
+        var body = Body(unit: unit, item: item, text: text)
+        if let r = response {
+            // Ink is not read on the device; the server has the strokes
+            // from the check-in, so the flag just says how it was answered.
+            body.answer = r.ink != nil ? "(written by hand)" : r.response
+            body.selectedIndex = r.selectedIndex
+            body.idk = r.idk == true ? true : nil
+        }
+        return try await post("/flag/\(subject)", body: try JSONEncoder().encode(body), timeout: 30)
     }
 
     // MARK: - device keys

@@ -903,6 +903,11 @@ func (s *Server) buildResultsDoc(sub *Subject, ex Exchange, results []Result, ga
 		doc.Dek = "Not yet - the chapter returns from a different angle. The reveals below are the map."
 	}
 
+	// What the reader flagged during the check, the latest word per item.
+	flagged := map[string]string{}
+	for _, f := range sub.Learner.Flags(ex.Unit) {
+		flagged[f.Item] = f.Concern
+	}
 	for _, res := range results {
 		q, _ := sub.Corpus.FindQuestion(res.ItemID)
 		if q == nil || q.Check == "screener" {
@@ -921,23 +926,17 @@ func (s *Server) buildResultsDoc(sub *Subject, ex Exchange, results []Result, ga
 		}
 		switch {
 		case q.Kind == "mcq":
-			if r.SelectedIndex != nil && *r.SelectedIndex >= 0 && *r.SelectedIndex < len(q.Options) {
-				e.Chose = fmt.Sprintf("%c — '%s'", 'A'+*r.SelectedIndex, q.Options[*r.SelectedIndex].Text)
-			}
-			for i, o := range q.Options {
-				if o.Correct {
-					e.Answer = fmt.Sprintf("%c — %s", 'A'+i, o.Text)
-					break
-				}
-			}
+			e.Chose = chosenOption(q, r.SelectedIndex)
+			e.Answer = referenceAnswer(q)
 		default:
 			e.ReadAs = r.Response
-			e.Answer = q.Answer.String()
+			e.Answer = referenceAnswer(q)
 		}
 		if fb := strings.TrimSpace(res.FeedbackMD); fb != "" &&
 			!strings.HasPrefix(fb, "Reference:") && !strings.HasPrefix(fb, "Marked \"I don't know\".") {
 			e.Why = fb
 		}
+		e.Flag = flagged[res.ItemID]
 		doc.Entries = append(doc.Entries, e)
 	}
 	// Unmapped items (not in the persisted chapter) sort last, in

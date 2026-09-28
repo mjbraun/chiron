@@ -216,3 +216,18 @@ func TestWrapContents(t *testing.T) {
 		t.Errorf("want 2 leaders, got %d", strings.Count(doc, `class="cleader"`))
 	}
 }
+
+// An item the reader flagged during the check shows their concern beside
+// it, whatever the verdict.
+func TestWrapResultsShowsWhatTheReaderFlagged(t *testing.T) {
+	r := &Renderer{KatexDir: "k", CacheDir: "c"}
+	d := sampleResults()
+	d.Entries[0].Flag = "the key would have been rotated at 16:00 & so useless at 17:15"
+	doc := r.wrapResults(d)
+	if strings.Count(doc, "FLAGGED") != 1 {
+		t.Errorf("want FLAGGED on exactly the flagged entry, doc has %d", strings.Count(doc, "FLAGGED"))
+	}
+	if !strings.Contains(doc, "“the key would have been rotated at 16:00 &amp; so useless at 17:15”") {
+		t.Error("the concern is not quoted, escaped, on the page")
+	}
+}

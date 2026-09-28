@@ -25,6 +25,7 @@ type ResultsEntry struct {
 	Chose      string `json:"chose,omitempty"`      // "B — 'option text'", MCQ
 	Answer     string `json:"answer,omitempty"`     // reference; math allowed
 	Why        string `json:"why,omitempty"`        // grader/option explanation
+	Flag       string `json:"flag,omitempty"`       // the reader's concern, if they flagged the item
 }
 
 type ResultsDoc struct {
@@ -152,6 +153,10 @@ func entryHTML(e ResultsEntry) string {
 	if e.Why != "" && miss && !e.IDK {
 		b.WriteString(metaRow("WHY", escapeText(e.Why), "erow-why"))
 	}
+	// What the reader said was wrong with the item, in their words.
+	if e.Flag != "" {
+		b.WriteString(metaRow("FLAGGED", quoted(e.Flag), "erow-flag"))
+	}
 	b.WriteString(`</div></div>`)
 	return b.String()
 }
@@ -218,5 +223,6 @@ func resultsCSS() string {
 .erow { display: flex; margin-top: 18px; }
 .elabel { flex: 0 0 170px; font-size: 22px; line-height: 42px; font-weight: 600; letter-spacing: 0.10em; text-transform: uppercase; color: #777; }
 .evalue { flex: 1 1 auto; min-width: 0; font-size: 30px; line-height: 42px; color: #000; }
-.erow-why .evalue { font-size: 28px; line-height: 40px; color: #333; }`
+.erow-why .evalue { font-size: 28px; line-height: 40px; color: #333; }
+.erow-flag .evalue { font-size: 28px; line-height: 40px; font-style: italic; color: #8A3D30; }`
 }

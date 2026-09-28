@@ -317,6 +317,16 @@ enum AppCommands {
             if await session.mark(text: text, kind: .question) != nil {
                 await session.ask(q)
             }
+        case "flag":
+            // The reader's concern about an item: the one named, or the
+            // first of the check.
+            guard let ch = session.chapter else { throw Failure.noBook }
+            guard let text = args["text"] as? String else { throw Failure.badArguments("flag needs text") }
+            let id = args["item"] as? String
+            guard let item = (ch.pretest + ch.check).first(where: { id == nil || $0.id == id }) else {
+                throw Failure.badArguments("no item \(id ?? "") in this chapter")
+            }
+            try await session.flag(item: item, concern: text, response: nil)
         case "sync":
             // Push what changed here, or pull when nothing did.
             await session.pushAnnotations()
@@ -470,6 +480,7 @@ enum AppCommands {
             out["pencil"] = s.lastPencil
             out["canvas_frame"] = ReaderView.Coordinator.probe?.canvasFrame ?? ""
             #endif
+            out["flagged"] = Array(s.flagged).sorted()
             out["marks"] = s.marks.map { ["id": $0.id, "kind": $0.kind.rawValue, "text": $0.text, "answered": $0.answer != nil, "turns": $0.history.count] }
             if let a = s.asking {
                 out["asking"] = ["question": a.mark.question ?? "", "busy": a.busy, "answered": a.mark.answer != nil, "error": a.error ?? "", "turns": a.mark.history.count]

@@ -101,6 +101,7 @@ type Data struct {
 	CurrentUnit    *string                        `json:"current_unit"`
 	ChapterCache   map[string]any                 `json:"chapter_cache"`
 	Questions      []Question                     `json:"questions,omitempty"`
+	Flags          []Flag                         `json:"flags,omitempty"`
 }
 
 // Event is one entry in the append-only log. Fields are optional per kind; the
@@ -141,6 +142,18 @@ type Question struct {
 	Question string  `json:"question"`
 	Answer   string  `json:"answer"`
 	TS       float64 `json:"ts"`
+}
+
+// Flag is an item the reader thinks is wrong: the question, its reference
+// answer or the grading. Kept with the answer they gave and the reference
+// as it was, so the concern still reads after the bank is rewritten.
+type Flag struct {
+	Unit      string  `json:"unit"`
+	Item      string  `json:"item"`
+	Concern   string  `json:"concern"`
+	Answer    string  `json:"answer,omitempty"`
+	Reference string  `json:"reference,omitempty"`
+	TS        float64 `json:"ts"`
 }
 
 // maxQuestions bounds the snapshot: the log keeps everything.
@@ -346,6 +359,12 @@ func (l *Learner) handle(ev Event) {
 			Unit: ev.Unit, Quote: ev.Evidence, Question: ev.Text, Answer: ev.Why, TS: ev.TS})
 		if n := len(l.Data.Questions); n > maxQuestions {
 			l.Data.Questions = l.Data.Questions[n-maxQuestions:]
+		}
+	case "flagged":
+		l.Data.Flags = append(l.Data.Flags, Flag{
+			Unit: ev.Unit, Item: ev.Item, Concern: ev.Text, Answer: ev.Evidence, Reference: ev.Why, TS: ev.TS})
+		if n := len(l.Data.Flags); n > maxQuestions {
+			l.Data.Flags = l.Data.Flags[n-maxQuestions:]
 		}
 	case "assumed_known":
 		seen := map[string]bool{}
@@ -629,6 +648,19 @@ func (l *Learner) Questions(unit string) []Question {
 	for _, q := range l.Data.Questions {
 		if unit == "" || q.Unit == unit {
 			out = append(out, q)
+		}
+	}
+	return out
+}
+
+// Flags lists what the reader flagged, in one unit or in all of them.
+func (l *Learner) Flags(unit string) []Flag {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	var out []Flag
+	for _, f := range l.Data.Flags {
+		if unit == "" || f.Unit == unit {
+			out = append(out, f)
 		}
 	}
 	return out

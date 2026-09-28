@@ -16,6 +16,10 @@ struct ItemFlowView: View {
     /// Present on the terminal check, absent on the pretest (which the learner
     /// never enters by accident - it opens itself).
     var onExit: (() -> Void)? = nil
+    /// Items already flagged as wrong, and the way to flag one: the
+    /// concern goes to the server at once, with the answer given so far.
+    var flagged: Set<String> = []
+    var onFlag: ((CheckItem, String, ItemResponse?) async throws -> Void)? = nil
     let onSubmit: ([ItemResponse]) async -> Void
 
     @State private var index = 0
@@ -33,6 +37,7 @@ struct ItemFlowView: View {
     @State private var handwriting = false
     @State private var drawing = PKDrawing()
     @State private var inkAnswer: InkAnswer?
+    @State private var flagging = false
     @FocusState private var typing: Bool
 
     var item: CheckItem { items[index] }
@@ -143,6 +148,7 @@ struct ItemFlowView: View {
                             .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 10))
                         }
                     }
+                    flagRow
                 }
             }
 
@@ -186,7 +192,41 @@ struct ItemFlowView: View {
         } message: {
             Text("The check is closed-book, so answers so far are discarded - re-entering starts it fresh.")
         }
+        .sheet(isPresented: $flagging) {
+            FlagCard(item: item) { concern in
+                guard let onFlag else { return }
+                try await onFlag(item, concern, responses.last { $0.itemId == item.id })
+            }
+        }
         .frame(maxWidth: 760)
+    }
+
+    /// A question, a reference answer or a grade the reader thinks is wrong
+    /// can be said so at any point on the item; once said, the item shows
+    /// it. Absent where nothing takes a flag (a session without a server).
+    @ViewBuilder private var flagRow: some View {
+        if onFlag != nil {
+            HStack {
+                Spacer()
+                if flagged.contains(item.id) {
+                    Label("Flagged", systemImage: "flag.fill")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .accessibilityLabel("Flagged as wrong")
+                } else {
+                    Button {
+                        flagging = true
+                    } label: {
+                        Label("Flag this question", systemImage: "flag")
+                            .font(.callout)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                    .hoverEffect()
+                    .accessibilityHint("Say what looks wrong with the question or its answer")
+                }
+            }
+        }
     }
 
     /// The answer surface for a constructed item: a line or a paragraph
@@ -279,6 +319,79 @@ struct ItemFlowView: View {
         guard let r = item.reveal?.options?[i] else { return .clear }
         if r.correct { return passed ? Color.secondary.opacity(0.10) : .green.opacity(0.12) }
         return selected == i ? .red.opacity(0.10) : .clear
+    }
+}
+
+/// What the reader thinks is wrong with an item: the question, the
+/// reference answer, or how it was graded. Sent on its own rather than
+/// with the check, so it is on record even if the check is left; the
+/// grade is not changed by it.
+struct FlagCard: View {
+    let item: CheckItem
+    let send: (String) async throws -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var concern = ""
+    @State private var sending = false
+    @State private var error: String?
+    @FocusState private var typing: Bool
+
+    private var trimmed: String { concern.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 12) {
+                MathText(text: item.prompt, size: 15)
+                    .foregroundStyle(.secondary)
+                    .frame(maxHeight: 120)
+                Text("What looks wrong? The question, the answer, or how it was graded.")
+                    .font(.callout)
+                TextEditor(text: $concern)
+                    .font(Typography.serif(17))
+                    .frame(minHeight: 120)
+                    .padding(6)
+                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(.quaternary))
+                    .focused($typing)
+                    .disabled(sending)
+                    .accessibilityLabel("Concern")
+                if let error {
+                    Text(error).font(.callout).foregroundStyle(.red)
+                }
+                Text("The concern is kept with the item and shown on the results; the grade stays as it is.")
+                    .font(.footnote).foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+            }
+            .padding(20)
+            .navigationTitle("Flag this question")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                        .disabled(sending)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    if sending {
+                        ProgressView()
+                    } else {
+                        Button("Send") { Task { await submit() } }
+                            .disabled(trimmed.isEmpty)
+                    }
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+        .onAppear { typing = true }
+    }
+
+    private func submit() async {
+        sending = true
+        error = nil
+        defer { sending = false }
+        do {
+            try await send(trimmed)
+            dismiss()
+        } catch {
+            // The text stays for another try.
+            self.error = "Could not reach the server. The flag is not on record yet."
+        }
     }
 }
 

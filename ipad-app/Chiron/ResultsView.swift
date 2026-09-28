@@ -170,6 +170,9 @@ struct ResultsEntryView: View {
                 if let why = entry.why, miss, !entry.isIDK {
                     MetaRow(label: "WHY", value: why)
                 }
+                if let flag = entry.flag, !flag.isEmpty {
+                    MetaRow(label: "FLAGGED", value: "“\(flag)”")
+                }
             }
         }
         .padding(.vertical, 6)

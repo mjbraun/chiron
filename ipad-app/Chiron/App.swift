@@ -173,7 +173,11 @@ struct BookView: View {
                             subtitle: "A measurement, not a test. Answer what you can; \"I don't know\" is an answer.",
                             items: ch.check,
                             reveal: false,
-                            submitLabel: "Finish"
+                            submitLabel: "Finish",
+                            flagged: session.flagged,
+                            onFlag: { item, concern, response in
+                                try await session.flag(item: item, concern: concern, response: response)
+                            }
                         ) { responses in
                             await session.submitCheck(responses)
                         }
@@ -189,7 +193,11 @@ struct BookView: View {
                             subtitle: "You are not supposed to know these yet - answering wrong here is part of how the chapter calibrates.",
                             items: ch.pretest,
                             reveal: true,
-                            submitLabel: "Start the chapter"
+                            submitLabel: "Start the chapter",
+                            flagged: session.flagged,
+                            onFlag: { item, concern, response in
+                                try await session.flag(item: item, concern: concern, response: response)
+                            }
                         ) { responses in
                             await session.submitPretest(responses)
                         }
@@ -202,7 +210,11 @@ struct BookView: View {
                             items: ch.check,
                             reveal: true,
                             submitLabel: "Submit check",
-                            onExit: { session.leaveCheck() }
+                            onExit: { session.leaveCheck() },
+                            flagged: session.flagged,
+                            onFlag: { item, concern, response in
+                                try await session.flag(item: item, concern: concern, response: response)
+                            }
                         ) { responses in
                             await session.submitCheck(responses)
                         }
