@@ -295,3 +295,42 @@ func TestExplainItDifferentlyRewritesTheWholeChapterWhenAsked(t *testing.T) {
 }
 
 func ptrBool(b bool) *bool { return &b }
+
+// The app sends the override as its own exchange, with no answers: the
+// check was graded in the one before. The server recorded an override only
+// while grading a check, so an override alone left the failed unit on the
+// fringe, and the chapter built next was that unit again, from its pretest,
+// though the reader had said to go on.
+func TestOverrideAloneMovesOnAndRecordsTheDebt(t *testing.T) {
+	s := newServer(t, "")
+	sub, _ := s.subject("ai")
+	// u0 is behind us, so going on from u1 means u2.
+	sub.Learner.Apply(state.Event{Kind: "check_result", Unit: "u0", Passed: ptrBool(true)})
+	_, missed := failU1(t, s)
+
+	out := exchange(t, s, `{"subject":"ai","phase":"boundary","unit":"u1","override":true,"async":true}`)
+	s.renders.Wait()
+	if out.Chapter != nil {
+		t.Errorf("an async override delivered chapter %s at once", out.Chapter.Unit)
+	}
+	if out.Authoring != "u2" {
+		t.Errorf("override authors %q, want u2, the unit after the one overridden", out.Authoring)
+	}
+	if got := sub.Learner.UnitStatus("u1"); got != "overridden" {
+		t.Errorf("u1 after the override is %q, want overridden", got)
+	}
+	debt := sub.Learner.OpenDebt()
+	if len(debt) != 1 || debt[0].Unit != "u1" || debt[0].Reason != "failed_gate" {
+		t.Fatalf("debt after the override: %+v, want one entry for u1", debt)
+	}
+	if strings.Join(debt[0].ItemsMissed, ",") != strings.Join(missed, ",") {
+		t.Errorf("debt carries misses %v, want the check's %v", debt[0].ItemsMissed, missed)
+	}
+	if len(debt[0].Concepts) == 0 {
+		t.Error("debt names no concepts")
+	}
+	w := do(t, s, "GET", "/chapter/ai", "", "")
+	if !strings.Contains(w.Body.String(), `"unit":"u2"`) {
+		t.Errorf("/chapter after the override does not serve u2: %.120s", w.Body.String())
+	}
+}

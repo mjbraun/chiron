@@ -78,6 +78,18 @@ symptom, the cause, what to do. Add to it in the same commit as the fix.
   a chapter arriving in any exchange clears the note. Read
   `events.jsonl` under the book's state dir for this kind of thing: two
   `unit_started` for one unit minutes apart is the sign.
+- **Overriding a failed gate sent the reader back to the chapter's pretest
+  (2026-09-28).** The app sends the override as its own exchange, no
+  answers in it (the check was graded the exchange before), but the server
+  recorded the override event only while grading a check. An override alone
+  recorded nothing, the failed unit stayed on the fringe, and the "next"
+  chapter built was the same unit, pretest first. Now an override with a
+  unit and no answers records the debt from the last check's misses and
+  goes on. The sign in `events.jsonl`: a failed `check_result` followed by
+  `unit_started` for the same unit and no `override` between them. Every
+  choice the results screen offers must have its own exchange handled
+  without the answers being sent again: sending them again grades the check
+  twice.
 - **The first request to a sleeping sprite fails (2026-09-24).** The
   platform wakes the sprite on the first connection and that connection
   is refused, or the gate answers 502 while the server comes up; the

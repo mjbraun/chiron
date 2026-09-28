@@ -866,6 +866,24 @@ func (s *Server) processExchange(sub *Subject, ex Exchange, asyncAuthor bool) ma
 				Concepts: unmastered, ItemsMissed: missed, Reason: "failed_gate"})
 		}
 
+	case ex.Override && ex.Unit != "":
+		// The override on its own, the check graded in the exchange before
+		// (the app's way; the results screen sends nothing twice). The
+		// debt carries that check's misses; the unit counts as cleared, so
+		// the book goes on rather than building the same unit again.
+		base, _ := repairBase(ex.Unit)
+		if unit, ok := sub.Corpus.Units[base]; ok {
+			var unmastered []string
+			for _, c := range unit.ConceptIDs() {
+				if sub.Learner.ConceptLevel(c) != "mastered" {
+					unmastered = append(unmastered, c)
+				}
+			}
+			_, missed, _ := sub.Learner.LastCheck(base)
+			sub.Learner.Apply(state.Event{Kind: "override", Unit: base,
+				Concepts: unmastered, ItemsMissed: missed, Reason: "failed_gate"})
+			gate = &Gate{Passed: false, Gate: sess.MasteryGate}
+		}
 	case ex.SkippedCheck && ex.Unit != "":
 		if unit, ok := sub.Corpus.Units[ex.Unit]; ok {
 			sub.Learner.Apply(state.Event{Kind: "override", Unit: ex.Unit,
