@@ -30,7 +30,7 @@ func New(cfg FactoryConfig) Chain {
 	case "anthropic":
 		return NewAnthropic(cfg.AnthropicModel)
 	case "claude-cli":
-		// An empty model means the per-role tiers apply.
+		// An empty model means BookModel for every role.
 		return &ClaudeCLI{Model: cfg.ClaudeCLIModel, ConfigDir: cfg.CLIConfigDir}
 	default:
 		return NewOpenAIChain(cfg.Upstreams, cfg.LLM)

@@ -49,20 +49,29 @@ func TestCommandDisablesTools(t *testing.T) {
 	}
 }
 
-func TestPerRoleModelTiers(t *testing.T) {
+// Every role runs on the one model the book is written with, unless the
+// config names another.
+func TestEveryRoleRunsOnTheBooksModel(t *testing.T) {
 	c := &ClaudeCLI{}
-	for role, want := range map[string]string{
-		"grader": "sonnet", "planner": "sonnet", "author": "opus",
-	} {
+	for _, role := range []string{"grader", "planner", "author", "something new"} {
 		argv := c.Command(role, "p", "s")
-		if got := argv[len(argv)-1]; got != want {
-			t.Errorf("%s uses %q, want %q", role, got, want)
+		if got := argv[len(argv)-1]; got != "claude-fable-5-1" {
+			t.Errorf("%s uses %q, want claude-fable-5-1", role, got)
 		}
+	}
+	if st := c.Status(); st.Model != "claude-fable-5-1" {
+		t.Errorf("status names %q", st.Model)
 	}
 	pinned := &ClaudeCLI{Model: "haiku"}
 	argv := pinned.Command("author", "p", "s")
 	if got := argv[len(argv)-1]; got != "haiku" {
-		t.Errorf("an explicit model must override the per-role tiers, got %q", got)
+		t.Errorf("an explicit model must override the default, got %q", got)
+	}
+}
+
+func TestTheDirectAPIDefaultsToTheBooksModel(t *testing.T) {
+	if DefaultAnthropicModel != "claude-fable-5-1" || DefaultVisionModel != "claude-fable-5-1" {
+		t.Errorf("defaults: text %q, vision %q", DefaultAnthropicModel, DefaultVisionModel)
 	}
 }
 

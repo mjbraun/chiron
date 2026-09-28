@@ -20,7 +20,7 @@ import (
 // There is no token-level schema enforcement here: the JSON contract is
 // prompt-enforced, extracted, and retried once.
 type ClaudeCLI struct {
-	// Model, when set, overrides the per-role tiers entirely.
+	// Model, when set, replaces BookModel for every role.
 	Model string
 	// ConfigDir, when set, is CLAUDE_CONFIG_DIR for every call: a
 	// directory of the server's own, so the user's hooks (which on the
@@ -43,16 +43,6 @@ var roleTimeouts = map[string]time.Duration{
 	"author":  40 * time.Minute,
 }
 
-// Per-role model tiers. Grading is a bounded judgement against an explicit
-// rubric, and sonnet scores 5/5 on the sycophancy red-team at roughly a sixth
-// of opus's latency, which is what makes a nine-item check tolerable. Authoring
-// is open-ended prose the learner reads for 25 minutes, so it keeps opus.
-var roleModels = map[string]string{
-	"grader":  "sonnet",
-	"planner": "sonnet",
-	"author":  "opus",
-}
-
 func (c *ClaudeCLI) available() bool {
 	// Presence of the binary, not of credentials: the login lives in a file on
 	// Linux but in the Keychain on macOS, so probing storage reports "not
@@ -66,10 +56,7 @@ func (c *ClaudeCLI) ModelFor(role string) string {
 	if c.Model != "" {
 		return c.Model
 	}
-	if m, ok := roleModels[role]; ok {
-		return m
-	}
-	return "opus"
+	return BookModel
 }
 
 func (c *ClaudeCLI) Status() Status {
@@ -78,7 +65,7 @@ func (c *ClaudeCLI) Status() Status {
 	}
 	model := c.Model
 	if model == "" {
-		model = "per-role: grader=sonnet, planner=sonnet, author=opus"
+		model = BookModel
 	}
 	return Status{Connected: true, Upstream: "claude-cli", Model: model}
 }

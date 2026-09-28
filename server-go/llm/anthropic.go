@@ -10,9 +10,17 @@ import (
 	"github.com/anthropics/anthropic-sdk-go/option"
 )
 
-// DefaultAnthropicModel is what the author role runs on when the server talks
-// to the API directly rather than through the Claude Code CLI.
-const DefaultAnthropicModel = string(anthropic.ModelClaudeOpus5)
+// BookModel is what every role runs on, grading, planning and authoring
+// alike, through the Claude Code CLI or the API, unless the config names
+// another.
+const BookModel = "claude-fable-5-1"
+
+// DefaultAnthropicModel is what the server runs on when it talks to the API
+// directly rather than through the Claude Code CLI.
+const DefaultAnthropicModel = BookModel
+
+// DefaultVisionModel reads handwriting when the server talks to the API.
+const DefaultVisionModel = BookModel
 
 // Anthropic is the direct-API backend, used when the server runs somewhere with
 // a key rather than a Claude Code login.

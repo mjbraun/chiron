@@ -85,7 +85,7 @@ func Transcribe(baseURL, model, tag string, pngData []byte) (string, error) {
 func TranscribeAnthropic(model, tag string, pngData []byte) (string, error) {
 	_ = tag
 	if model == "" {
-		model = "claude-haiku-4-5-20251001"
+		model = DefaultVisionModel
 	}
 	if os.Getenv("ANTHROPIC_API_KEY") == "" && os.Getenv("ANTHROPIC_AUTH_TOKEN") == "" {
 		return "", fmt.Errorf("vision model: no credentials: set ANTHROPIC_API_KEY")
