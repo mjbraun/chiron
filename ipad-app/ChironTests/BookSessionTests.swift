@@ -485,6 +485,53 @@ final class BookSessionTests: XCTestCase {
         XCTAssertEqual(fake.chapterPolls, polls, "no wait for a chapter already in hand")
     }
 
+    /// The check-in is taken once per chapter, on whichever device. A phone
+    /// opening a book the iPad had read past its pretest landed on the
+    /// pretest again, because whether it was done lived on the device
+    /// alone (2026-09-29). The server says so beside the chapter, and the
+    /// second device opens in the prose.
+    func testAPretestTakenOnAnotherDeviceIsNotAskedAgain() async {
+        fake.onState = { [unowned self] _ in self.fixture(BookState.self, "state") }
+        fake.onChapter = { [unowned self] _ in
+            ChapterStatus(chapter: self.chapterWithPretest("u1"), authoring: false, authoringError: "",
+                          pretestDone: true)
+        }
+        let s = session()
+        await s.open()
+        guard case .reading = s.screen else { return XCTFail("\(s.screen)") }
+        XCTAssertEqual(s.chapter?.unit, "u1")
+        XCTAssertTrue(fake.exchanges.isEmpty, "nothing to answer, nothing sent")
+
+        // A chapter whose pretest is still to take is asked.
+        fake.onChapter = { [unowned self] _ in
+            ChapterStatus(chapter: self.chapterWithPretest("u2"), authoring: false, authoringError: "",
+                          pretestDone: false)
+        }
+        let t = session()
+        await t.open()
+        guard case .pretest = t.screen else { return XCTFail("\(t.screen)") }
+    }
+
+    /// This device has the chapter and never took its pretest; the server
+    /// says another device did. The server's word wins over the cache.
+    func testTheServersWordOnThePretestOutranksTheCachedChapter() async {
+        fake.onState = { [unowned self] _ in self.fixture(BookState.self, "state") }
+        fake.onChapter = { [unowned self] _ in
+            ChapterStatus(chapter: self.chapterWithPretest("u1"), authoring: false, authoringError: "")
+        }
+        let s = session()
+        await s.open()
+        guard case .pretest = s.screen else { return XCTFail("\(s.screen)") }
+
+        fake.onChapter = { [unowned self] _ in
+            ChapterStatus(chapter: self.chapterWithPretest("u1"), authoring: false, authoringError: "",
+                          pretestDone: true)
+        }
+        let t = session()
+        await t.open()
+        guard case .reading = t.screen else { return XCTFail("\(t.screen)") }
+    }
+
     func testServerAwayIsAnErrorScreenAndTryAgainRecovers() async {
         let s = session()
         await s.open()

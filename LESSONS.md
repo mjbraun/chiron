@@ -90,6 +90,20 @@ symptom, the cause, what to do. Add to it in the same commit as the fix.
   choice the results screen offers must have its own exchange handled
   without the answers being sent again: sending them again grades the check
   twice.
+- **A book read past its pretest on the iPad opened on the pretest on the
+  phone (2026-09-29).** Whether a chapter's pretest had been taken lived
+  on the device alone (`pretestDone`, reset whenever a chapter arrived),
+  while the reading position went through the server with the marks. The
+  server now records a `pretest` event when it grades one, `GET
+  /chapter/{subject}` says `pretest_done` beside the chapter, and the app
+  takes the server's word over its own memory. The position had a second
+  gap: the reader loaded the page with the position it remembered (none,
+  on a device that had not read there) and the server's copy, arriving a
+  moment later, moved nothing. The session now announces a position it
+  adopts (`restoredPosition`) and the reader scrolls the page to it
+  (`setPosition` in book.js). Anything a second device needs to land in
+  the right place belongs on the server, not in the app's per-subject
+  `position` file.
 - **The first request to a sleeping sprite fails (2026-09-24).** The
   platform wakes the sprite on the first connection and that connection
   is refused, or the gate answers 502 while the server comes up; the

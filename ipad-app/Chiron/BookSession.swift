@@ -63,6 +63,15 @@ final class BookSession: ObservableObject {
     /// Where the reader left each chapter: a fraction of its scroll, 0 at
     /// the top and 1 at the bottom.
     private var positions: [String: Double] = [:]
+    /// A position taken from the server after the page may already be
+    /// showing: the reader moves the page there. Each take is its own
+    /// value, so the same place twice is still announced twice.
+    struct RestoredPosition: Equatable {
+        let unit: String
+        let position: Double
+        let n: Int
+    }
+    @Published private(set) var restoredPosition: RestoredPosition?
     /// The reader's marks on the current chapter: highlights and questions.
     @Published private(set) var marks: [Mark] = []
     /// The reader's ink over the current chapter, as PencilKit data.
@@ -259,6 +268,15 @@ final class BookSession: ObservableObject {
                 // rewritten under it): the cache is just as stale, and the
                 // start below has the server write the chapter afresh.
                 chapter = nil
+            }
+            // The check-in is taken once per chapter, on whichever device.
+            // The server's word that it was outranks this device's memory:
+            // a phone opening a book the iPad had read past its pretest
+            // otherwise asked the pretest again (2026-09-29).
+            if status.pretestDone == true, let unit = status.chapter?.unit,
+               unit == chapter?.unit, !pretestDone {
+                pretestDone = true
+                persist()
             }
         }
         // The wait clears before anything below runs an exchange: an
@@ -933,6 +951,8 @@ final class BookSession: ObservableObject {
         inkDirty = true
         undoable = []  // history from before the copy would take it apart
         positions[unit] = a.position
+        restoredPosition = RestoredPosition(unit: unit, position: a.position,
+                                            n: (restoredPosition?.n ?? 0) + 1)
         annotationVersions[unit] = a.version
         annotationDirty.remove(unit)
         persistMarks(changed: false)

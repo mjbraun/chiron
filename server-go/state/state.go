@@ -51,6 +51,10 @@ type UnitState struct {
 	// round is scored against the whole check.
 	Missed []string `json:"missed,omitempty"`
 	Items  int      `json:"items,omitempty"`
+	// PretestDone: the chapter's pretest has been answered since the
+	// unit was last started. A second device opening the book reads it
+	// to land in the prose rather than on the check-in again.
+	PretestDone bool `json:"pretest_done,omitempty"`
 }
 
 type MisconceptionState struct {
@@ -353,11 +357,16 @@ func (l *Learner) handle(ev Event) {
 	case "unit_started":
 		unit := ev.Unit
 		l.Data.CurrentUnit = &unit
-		l.unit(ev.Unit).Status = "active"
+		u := l.unit(ev.Unit)
+		u.Status = "active"
+		// A chapter delivered again asks its pretest again.
+		u.PretestDone = false
 		if l.Data.Pacing.SessionStarted == nil {
 			t := l.nowFn()
 			l.Data.Pacing.SessionStarted = &t
 		}
+	case "pretest":
+		l.unit(ev.Unit).PretestDone = true
 	case "chapter_cached":
 		l.Data.ChapterCache[ev.Unit] = ev.Ref
 	case "self_rating":
@@ -526,6 +535,15 @@ func (l *Learner) LastCheck(unitID string) (score float64, missed []string, item
 		score = *u.CheckScore
 	}
 	return score, append([]string(nil), u.Missed...), u.Items
+}
+
+// PretestDone reports whether the unit's pretest has been answered since
+// the unit was last started.
+func (l *Learner) PretestDone(unitID string) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	u, ok := l.Data.Units[unitID]
+	return ok && u.PretestDone
 }
 
 func (l *Learner) UnitStatus(unitID string) string {

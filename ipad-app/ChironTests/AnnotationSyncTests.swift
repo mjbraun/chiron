@@ -36,6 +36,23 @@ final class AnnotationSyncTests: XCTestCase {
         XCTAssertTrue(fake.annotationPuts.isEmpty, "taking the server's copy is not a change to push")
     }
 
+    /// The page loads with the position this device remembers; the server's
+    /// copy lands after that. The reader is told where the other device
+    /// left off, so the page moves there instead of staying at the top.
+    func testAPositionTakenFromTheServerIsAnnouncedToTheReader() async throws {
+        let fake = FakeService()
+        fake.onAnnotations = { _, _ in
+            Annotations(version: 3, updatedAt: nil, device: "iPhone", marks: [], inkB64: nil, position: 0.65)
+        }
+        let s = session(fake)
+        XCTAssertNil(s.restoredPosition)
+        openChapter(s)
+        try await settle()
+        XCTAssertEqual(s.restoredPosition?.unit, "u1")
+        XCTAssertEqual(s.restoredPosition?.position, 0.65)
+        XCTAssertEqual(s.position(for: "u1"), 0.65)
+    }
+
     func testAMarkHereIsPushedOnTopOfTheVersionLastAgreed() async throws {
         let fake = FakeService()
         fake.onAnnotations = { [unowned self] _, _ in Annotations(version: 3, updatedAt: nil, device: nil, marks: [self.mark("a")], inkB64: nil, position: 0) }

@@ -412,3 +412,31 @@ func TestAFlagIsRuledOnce(t *testing.T) {
 		t.Fatalf("flags = %+v", flags)
 	}
 }
+
+// A chapter's pretest is taken once per delivery of the chapter. The
+// event that records it belongs to the unit, and a unit started again
+// (re-authored, remediated) asks its pretest again.
+func TestPretestDoneFollowsTheUnitDelivery(t *testing.T) {
+	l := newLearner(t)
+	if _, err := l.Apply(Event{Kind: "unit_started", Unit: "u1"}); err != nil {
+		t.Fatal(err)
+	}
+	if l.PretestDone("u1") {
+		t.Fatal("pretest done before it was taken")
+	}
+	if _, err := l.Apply(Event{Kind: "pretest", Unit: "u1"}); err != nil {
+		t.Fatal(err)
+	}
+	if !l.PretestDone("u1") {
+		t.Fatal("pretest taken, not recorded")
+	}
+	if l.PretestDone("u2") {
+		t.Fatal("another unit's pretest reported done")
+	}
+	if _, err := l.Apply(Event{Kind: "unit_started", Unit: "u1"}); err != nil {
+		t.Fatal(err)
+	}
+	if l.PretestDone("u1") {
+		t.Fatal("a unit started again keeps its old pretest")
+	}
+}

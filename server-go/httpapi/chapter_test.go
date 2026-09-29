@@ -257,3 +257,48 @@ func TestChapterStatusReportsBuildStage(t *testing.T) {
 		t.Fatalf("stage reported after the build: %s", w.Body.String())
 	}
 }
+
+// Whether the chapter's pretest has been taken is the server's to know:
+// a second device opening the book must land in the prose where the
+// first left off, not on the check-in the first already answered
+// (2026-09-29). /chapter/{subject} says so beside the chapter.
+func TestChapterEndpointSaysWhenThePretestWasTaken(t *testing.T) {
+	s := newServer(t, "")
+	unit, items := walkToSeries(t, s, "ai")
+	w := do(t, s, "POST", "/exchange",
+		`{"subject":"ai","phase":"boundary","unit":"`+unit+`","check_responses":[`+idkAnswers(items)+`]}`, "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("series exchange -> %d: %s", w.Code, w.Body.String())
+	}
+	status := func() (unit string, done bool) {
+		w := do(t, s, "GET", "/chapter/ai", "", "")
+		if w.Code != http.StatusOK {
+			t.Fatalf("/chapter/ai -> %d: %s", w.Code, w.Body.String())
+		}
+		var st struct {
+			Chapter *struct {
+				Unit string `json:"unit"`
+			} `json:"chapter"`
+			PretestDone bool `json:"pretest_done"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &st); err != nil {
+			t.Fatal(err)
+		}
+		if st.Chapter == nil {
+			t.Fatalf("no chapter: %s", w.Body.String())
+		}
+		return st.Chapter.Unit, st.PretestDone
+	}
+	if u, done := status(); u != "u1" || done {
+		t.Fatalf("after the series: chapter %s, pretest_done %v; want u1, false", u, done)
+	}
+
+	w = do(t, s, "POST", "/exchange",
+		`{"subject":"ai","phase":"pretest","unit":"u1","pretest_responses":[{"item_id":"u1-p1","idk":true,"confidence":1}]}`, "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("pretest exchange -> %d: %s", w.Code, w.Body.String())
+	}
+	if u, done := status(); u != "u1" || !done {
+		t.Fatalf("after the pretest: chapter %s, pretest_done %v; want u1, true", u, done)
+	}
+}

@@ -772,6 +772,7 @@ func (s *Server) handleChapter(w http.ResponseWriter, r *http.Request) {
 	}
 	if ch, err := requestChapter(sub, r); err == nil {
 		out["chapter"] = ch
+		out["pretest_done"] = sub.Learner.PretestDone(ch.Unit)
 	}
 	writeJSON(w, http.StatusOK, out)
 }
@@ -805,6 +806,19 @@ func (s *Server) processExchange(sub *Subject, ex Exchange, asyncAuthor bool) ma
 	if len(ex.PretestResponses) > 0 {
 		p, t := s.gradeItems(sub, ex.PretestResponses, &results)
 		fmt.Fprintf(&summary, "Pretest: %d/%d. ", p, t)
+		// The pretest is taken once per chapter, on whichever device: the
+		// record lets another device open the book in the prose.
+		unit := ex.Unit
+		if unit == "" {
+			if cur := sub.Learner.Data.CurrentUnit; cur != nil {
+				unit = *cur
+			}
+		}
+		if unit != "" {
+			if _, err := sub.Learner.Apply(state.Event{Kind: "pretest", Unit: unit}); err != nil {
+				log.Printf("record pretest %s: %v", unit, err)
+			}
+		}
 	}
 
 	screenerOnly := len(ex.CheckResponses) > 0

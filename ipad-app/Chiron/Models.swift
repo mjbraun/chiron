@@ -518,11 +518,15 @@ struct ChapterStatus: Codable {
     /// how many seconds ago it began.
     let authoringStage: String?
     let authoringSeconds: Int?
+    /// The chapter's pretest has been answered, on this device or another:
+    /// the book opens in the prose, not on the check-in again.
+    let pretestDone: Bool?
 
     init(chapter: ChapterPayload?, authoring: Bool, authoringError: String?,
-         authoringStage: String? = nil, authoringSeconds: Int? = nil) {
+         authoringStage: String? = nil, authoringSeconds: Int? = nil, pretestDone: Bool? = nil) {
         self.chapter = chapter; self.authoring = authoring; self.authoringError = authoringError
         self.authoringStage = authoringStage; self.authoringSeconds = authoringSeconds
+        self.pretestDone = pretestDone
     }
 
     enum CodingKeys: String, CodingKey {
@@ -530,6 +534,7 @@ struct ChapterStatus: Codable {
         case authoringError = "authoring_error"
         case authoringStage = "authoring_stage"
         case authoringSeconds = "authoring_seconds"
+        case pretestDone = "pretest_done"
     }
 }
 

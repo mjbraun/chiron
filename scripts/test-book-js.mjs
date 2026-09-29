@@ -102,6 +102,15 @@ for (const [position, want, label] of restoreCases) {
     console.log(`FAIL restore ${label}: ${got}, wanted ${want}`);
   }
 }
-const total = cases.length + choiceCases.length + positionCases.length + 1 + restoreCases.length;
+// A position that arrives after the page loaded (the server's copy of
+// where another device left off) moves the page there.
+let scrolledTo = null;
+sandbox.window.scrollTo = (_x, y) => { scrolledTo = y; };
+sandbox.setPosition(0.25);
+if (scrolledTo !== 1000) {
+  failed++;
+  console.log(`FAIL setPosition: scrolled to ${scrolledTo}, wanted 1000`);
+}
+const total = cases.length + choiceCases.length + positionCases.length + 1 + restoreCases.length + 1;
 console.log(`${total - failed}/${total} book.js cases pass`);
 process.exit(failed ? 1 : 0);

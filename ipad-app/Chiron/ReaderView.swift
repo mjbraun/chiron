@@ -146,6 +146,17 @@ struct ReaderView: UIViewRepresentable {
             c.scale = scale
             web.evaluateJavaScript("setScale(\(scale))")
         }
+        // Where another device left off, arriving from the server after
+        // the page was asked for: the page moves there. Before the page is
+        // ready the position waits for initChapter.
+        if let restored = session.restoredPosition, restored.unit == chapter.unit,
+           restored.n != c.restoredN {
+            c.restoredN = restored.n
+            c.position = restored.position
+            if c.pageReady {
+                web.evaluateJavaScript("setPosition(\(restored.position))")
+            }
+        }
         c.apply(tool: session.tool, color: session.penColor.uiColor)
         c.apply(marks: session.marks)
         c.apply(ink: session.inkData)
@@ -172,6 +183,8 @@ struct ReaderView: UIViewRepresentable {
         var pendingChapter: ChapterPayload?
         var scale: CGFloat = 1
         var position: Double = 0
+        /// The last position taken from the server that the page was told.
+        var restoredN = 0
         var pageReady = false
         var appliedMarks: [Mark]?
         /// What the page last focused, for the harness.

@@ -115,6 +115,12 @@ function scrollTop(position) {
   return position * Math.max(0, scrollRange());
 }
 
+/* A position that arrives after the page loaded: where another device
+ * left off, from the server. The page moves there. */
+function setPosition(position) {
+  window.scrollTo(0, scrollTop(position));
+}
+
 /* The native side keeps the reading position; report it as the page
  * settles rather than on every scroll event. */
 let scrollTimer = null;
