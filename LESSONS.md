@@ -389,7 +389,17 @@ symptom, the cause, what to do. Add to it in the same commit as the fix.
   canon at all. For an addition, render only the new passage and splice
   it at the same anchor in both files (a `<!-- fade -->` comment or the
   paragraph it replaces survive rendering verbatim), so the author's
-  wording around it stays (2026-10-12, the PKCE and nonce runs).
+  wording around it stays (2026-10-12, the PKCE and nonce runs). When the
+  edit reaches the bank's prose (an `explain`, a distractor), the stored
+  chapter's `bank_hash` no longer matches and the next open drops it;
+  rather than let it rebuild, recompute the hash from the edited corpus
+  with the `httpapi.bankHash` formula (a throwaway `main` over
+  `corpus.Load`) and write it into the chapter together with the same
+  text change in its baked `beats`, `check` and `pretest`. The planner
+  and the tutor wrote unit ids ("your u1 result") because the prompts
+  hand them `unit.ID`; `unitNameRule` in `roles/style.go` now tells every
+  role that writes for the reader to use the title (2026-10-12, Matt
+  could not tell what u1 or u12 stood for).
 
 - **A new Swift file needs `xcodegen generate` before it builds
   (2026-09-06).** `Chiron.xcodeproj` is generated from `project.yml`; a

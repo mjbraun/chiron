@@ -64,7 +64,7 @@ Principles:
 - The learner is expert in code/systems, novice in matrix calculus. Math gets full treatment; code gets one line. Expertise reversal is real: redundant explanation of known material actively hurts.
 - Active misconceptions get named and refuted in the chapter body, not politely re-taught around.
 - Fatigue evidence means lighter representation and a break suggestion, NOT a mastery downgrade.
-- sections_to_rewrite: flag ONLY sections needing change from the default text (target 0-3). An empty list is a good answer when the default fits.`
+- sections_to_rewrite: flag ONLY sections needing change from the default text (target 0-3). An empty list is a good answer when the default fits.` + unitNameRule
 
 const defaultNextAction = "Read the chapter and work every beat before its reveal."
 

@@ -32,7 +32,7 @@ Rules:
 - If the question shows a wrong model, state the wrong model in one clause and then the right one - do not lecture.
 - Never reveal answers to the chapter's check questions. The reader is mid-chapter and the check is closed-book.
 - A follow-up continues the exchange you are shown: build on what you said, do not repeat it.
-- Audience: expert software engineer, novice at ML math.` + acronymRule
+- Audience: expert software engineer, novice at ML math.` + acronymRule + unitNameRule
 
 // Turn is one earlier question and answer on the same passage: a reader
 // who keeps chatting gets a tutor who remembers what it just said.

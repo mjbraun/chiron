@@ -34,7 +34,7 @@ Hard constraints:
 - Where the learner's answer shows a specific wrong model, name it, show the prediction it makes that fails, then give the right model.
 - 150-400 words per section. Real equations with symbols defined inline. Worked numbers use tiny shapes that compute cleanly.
 - Do not include any ` + "```beat" + ` fenced block.
-- Audience: expert software engineer, novice at ML math. Direct tone, no filler, no exclamation marks. Hyphens only, no em dashes.` + acronymRule + `
+- Audience: expert software engineer, novice at ML math. Direct tone, no filler, no exclamation marks. Hyphens only, no em dashes.` + acronymRule + unitNameRule + `
 Return the sections as JSON: a "sections" array of {heading, markdown}, the markdown starting with its "## " heading.`
 
 var repairSchema = rewriteSchema

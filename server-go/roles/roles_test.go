@@ -338,3 +338,19 @@ func TestPromptsThatWriteForTheReaderExpandAcronyms(t *testing.T) {
 		}
 	}
 }
+
+// A reader does not see unit ids: "u1" in a planner note or an answer means
+// nothing to them (Matt, 2026-10-12, on the Agent Auth book). Every role
+// whose words reach the reader is told to name a unit by its title.
+func TestRolesNameUnitsByTitleNotID(t *testing.T) {
+	for name, system := range map[string]string{
+		"planner": plannerSystem,
+		"author":  authorSystem,
+		"answer":  answerSystem,
+		"repair":  repairSystem,
+	} {
+		if !strings.Contains(system, unitNameRule) || !strings.Contains(unitNameRule, "never by its id") {
+			t.Errorf("%s prompt does not tell the model to name units by title", name)
+		}
+	}
+}

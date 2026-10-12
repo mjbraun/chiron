@@ -32,7 +32,7 @@ const authorSystem = `You rewrite specific sections of a textbook chapter for on
 
 Hard constraints:
 - Preserve full technical coverage of the canonical section. You may change representation, depth, examples, and framing - never drop a concept.
-- Keep every ` + acronymRule + "```beat" + ` fenced block byte-for-byte intact and in a sensible position.
+- Keep every ` + "```beat" + ` fenced block byte-for-byte intact and in a sensible position.` + acronymRule + unitNameRule + `
 - Refutation style when attacking a misconception: state the wrong model, give the specific prediction it makes that fails, say why it is appealing, then the correct model.
 - Real equations with symbols defined inline at first use. Restate rather than cross-reference. Worked numbers use tiny shapes that compute cleanly.
 - Audience: expert software engineer, novice at ML math. Math explained fully, code in one line. Direct tone, no filler, no exclamation marks. Hyphens only, no em dashes.
