@@ -10,7 +10,10 @@ import "strings"
 //     for two empty inline spans.
 //   - an inline `$` opens math only if it is not backslash-escaped and is not
 //     followed by whitespace (so "costs $5 or $10" is prose, not math).
-//   - it closes on the next unescaped `$` that is not preceded by whitespace.
+//   - it closes on the next unescaped `$` that is not preceded by whitespace,
+//     or that is preceded by one but followed by none of a word, a digit or
+//     another dollar: "$\rho = $ sheets" is a span, while the second dollar
+//     of "$5 or $10" is a price and that of "$5 for $x^2$" an opener.
 //   - a span never spans a blank line; an unclosed `$` is prose, not a runaway
 //     equation swallowing the rest of the chapter.
 type span struct{ start, end int } // byte offsets, end exclusive
@@ -63,13 +66,19 @@ func inlineEnd(s string, open int) int {
 				return 0
 			}
 		case '$':
-			if isSpace(s[j-1]) {
-				return 0 // "$x $" is not a span; treat the opener as prose
+			if isSpace(s[j-1]) && j+1 < len(s) && !isSpace(s[j+1]) && !isPunct(s[j+1]) {
+				return 0 // "$5 or $10": a price, or the next opener; this opener is prose
 			}
 			return j + 1
 		}
 	}
 	return 0
+}
+
+// isPunct reports whether a byte ends a span's reading as prose: a closer
+// after a space may be followed by it, or by whitespace, or by nothing.
+func isPunct(b byte) bool {
+	return strings.IndexByte(`.,;:!?)]}'"`, b) >= 0
 }
 
 func isSpace(b byte) bool {

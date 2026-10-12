@@ -573,3 +573,9 @@ symptom, the cause, what to do. Add to it in the same commit as the fix.
   an exchange and cached by the app, so a renderer change alone would
   never have reached the chapter being read. The span cases live in both
   `render_test.go` and `scripts/test-book-js.mjs`; keep them the same.
+  The strict rule then went too far: a model writes "$\rho = $ sheets"
+  with a space before the closer, which auto-render had set and the new
+  rule showed raw. A closer may now follow a space when what follows it
+  is a space, punctuation or the end of the text; a word or a digit after
+  it still means a price or the next opener. `TestFindMathSpans` holds
+  the cases.

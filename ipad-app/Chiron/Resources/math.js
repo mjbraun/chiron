@@ -12,9 +12,15 @@ function mathIsSpace(c) {
   return c === " " || c === "\t" || c === "\n" || c === "\r" || c === "\f" || c === "\v";
 }
 
+function mathIsPunct(c) {
+  return ".,;:!?)]}'\"".includes(c);
+}
+
 /* The exclusive end of the inline span opening at `open`, or 0 if this
- * dollar opens none: an opener is not followed by whitespace, a closer is
- * not preceded by it, and a span never crosses a blank line. */
+ * dollar opens none: an opener is not followed by whitespace; a closer is
+ * not preceded by it, or is but is followed by none of a word, a digit or
+ * another dollar ("$\rho = $ sheets" is a span, "$5 or $10" two prices);
+ * and a span never crosses a blank line. */
 function mathInlineEnd(s, open) {
   if (open + 1 >= s.length || mathIsSpace(s[open + 1]) || s[open + 1] === "$") return 0;
   for (let j = open + 1; j < s.length; j++) {
@@ -25,7 +31,7 @@ function mathInlineEnd(s, open) {
       continue;
     }
     if (c === "$") {
-      if (mathIsSpace(s[j - 1])) return 0;
+      if (mathIsSpace(s[j - 1]) && j + 1 < s.length && !mathIsSpace(s[j + 1]) && !mathIsPunct(s[j + 1])) return 0;
       return j + 1;
     }
   }

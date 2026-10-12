@@ -200,11 +200,50 @@ func TestTeXDelimiters(t *testing.T) {
 		{"a fence is left alone", "<pre><code>$a$\n$b$</code></pre><p>$a$</p>", "<pre><code>$a$\n$b$</code></pre><p>\\(a\\)</p>"},
 		{"a span does not cross a tag", `<p>$a <em>b</em> c$</p>`, `<p>$a <em>b</em> c$</p>`},
 		{"escaped math keeps its entities", `<p>$x_{&lt;t}$</p>`, `<p>\(x_{&lt;t}\)</p>`},
+		{"a closer after a space closes before code", `<p>an edit has $\rho = $ <code>sheets</code></p>`, `<p>an edit has \(\rho = \) <code>sheets</code></p>`},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			if got := TeXDelimiters(c.in); got != c.want {
 				t.Errorf("TeXDelimiters(%q)\n got: %s\nwant: %s", c.in, got, c.want)
+			}
+		})
+	}
+}
+
+// The spans the server finds, as the page script finds them: these cases
+// mirror scripts/test-book-js.mjs and must stay the same there. A closer
+// may follow a space when a word does not follow it (a chapter wrote
+// "$\rho = $ sheets" and it showed raw); a dollar before a word or a digit
+// is a price or an opener, so "$5 or $10" and "$5 for $x^2$" keep their
+// readings.
+func TestFindMathSpans(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want []string
+	}{
+		{"an inline span", `The set $\{1, 2\}$ is small.`, []string{`$\{1, 2\}$`}},
+		{"display math is one span", `$$C = M \oplus K$$`, []string{`$$C = M \oplus K$$`}},
+		{"prices are not math", `It costs $5 or maybe $10 tops.`, nil},
+		{"two sums in one sentence are not math", `for about $33K MRR of customers; a written SLA (Nous at $74.8K MRR, Feldera)`, nil},
+		{"an escaped dollar is prose", `A literal \$ sign and $x$.`, []string{`$x$`}},
+		{"a closer after a space closes when nothing opens after it", `an edit has $\rho = $ sheets, the test fails`, []string{`$\rho = $`}},
+		{"a trailing space inside a span is still a span", `$x $ is a span`, []string{`$x $`}},
+		{"a bare dollar with no opener is prose", `capitalization in $ trillion`, nil},
+		{"a closer after a space does not close on a word", `Pay $5 and $ten more.`, nil},
+		{"an unclosed dollar does not cross a blank line", "A stray $ here.\n\nA new paragraph $y$.", []string{`$y$`}},
+		{"emphasis inside math is math", `$a_*b_*c$ stays put.`, []string{`$a_*b_*c$`}},
+		{"a price before a span does not take its opener", `Pay $5 for $x^2$ twice.`, []string{`$x^2$`}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			var got []string
+			for _, sp := range findMathSpans(c.in) {
+				got = append(got, c.in[sp.start:sp.end])
+			}
+			if strings.Join(got, "|") != strings.Join(c.want, "|") {
+				t.Errorf("findMathSpans(%q)\n got: %q\nwant: %q", c.in, got, c.want)
 			}
 		})
 	}
