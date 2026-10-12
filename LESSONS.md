@@ -364,6 +364,26 @@ symptom, the cause, what to do. Add to it in the same commit as the fix.
   `chiron-server` - it reads units at start. Generated books live only on
   the sprite: copy the unit down, run the tool with
   `-spec corpus/authoring-spec.md`, copy it back.
+- **A change to a chapter's prose is a change to two files
+  (2026-10-12).** A reader's request to rewrite a section of a generated
+  book ("the state discussion should be numbered steps") touches nothing
+  in the repo: the unit's `canon.md` and its three depth files under
+  `~/chiron/corpus-<book>/units/<unit>/` are the source, and the chapter
+  the iPad shows is the stored copy under
+  `~/chiron/state/<book>/chapters/<unit>.json`, written when the chapter
+  was authored. Editing the canon alone changes nothing the reader sees,
+  and the server only drops a stored chapter when the bank or the beats
+  change, so a prose edit never triggers a rebuild (and should not: a
+  rebuild costs model time and loses the planner's note). Back both up
+  under `~/backups/<date>/`, edit the markdown, render the one section
+  with `render.RenderMarkdown` (a throwaway `main` under `cmd/`, deleted
+  after) and splice it into the `html` field between the section's `<h2>`
+  and the next beat `<div>`; keep `bank_hash` as it was and confirm it
+  still matches the unit (the same formula as `httpapi.bankHash`). The
+  app takes the server's copy over its cache whenever the HTML differs,
+  so the next open shows it; no restart, since `loadChapter` reads the
+  file each time. The canon edit reaches a re-authoring only after the
+  next server start, because units are read at boot.
 
 - **A new Swift file needs `xcodegen generate` before it builds
   (2026-09-06).** `Chiron.xcodeproj` is generated from `project.yml`; a
