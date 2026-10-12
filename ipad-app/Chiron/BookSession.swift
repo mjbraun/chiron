@@ -883,6 +883,7 @@ final class BookSession: ObservableObject {
     #if DEBUG
     /// Tests put a chapter in hand without a server round trip.
     func setChapterForTesting(_ ch: ChapterPayload) { setChapter(ch) }
+    func restoreForTesting() { restore() }
     func setBookStateForTesting(_ st: BookState) { bookState = st }
     #endif
 
@@ -963,25 +964,34 @@ final class BookSession: ObservableObject {
 
     /// On opening a unit: the server's copy is taken when it is newer and
     /// nothing changed here since the last agreement; when both changed,
-    /// the reader is asked.
+    /// the reader is asked. When the server has nothing newer, what
+    /// changed here while it was away goes up now.
     func pullAnnotations() async {
         guard let unit = chapter?.unit else { return }
-        guard let server = try? await service.annotations(subject: subjectID, unit: unit) else { return }
-        guard chapter?.unit == unit else { return }
-        let known = annotationVersions[unit] ?? 0
-        if server.version <= known { return }
-        if annotationDirty.contains(unit) || (known == 0 && (!marks.isEmpty || inkData != nil)) {
-            let mine = localAnnotations(unit)
-            if sameContent(mine, server) {
-                annotationVersions[unit] = server.version
-                annotationDirty.remove(unit)
-                persistAnnotationMeta()
-                return
-            }
-            conflict = Conflict(unit: unit, mine: mine, theirs: server)
+        let server: Annotations?
+        do {
+            server = try await service.annotations(subject: subjectID, unit: unit)
+        } catch {
             return
         }
-        adopt(server, unit: unit)
+        guard chapter?.unit == unit else { return }
+        let known = annotationVersions[unit] ?? 0
+        if let server, server.version > known {
+            if annotationDirty.contains(unit) || (known == 0 && (!marks.isEmpty || inkData != nil)) {
+                let mine = localAnnotations(unit)
+                if sameContent(mine, server) {
+                    annotationVersions[unit] = server.version
+                    annotationDirty.remove(unit)
+                    persistAnnotationMeta()
+                    return
+                }
+                conflict = Conflict(unit: unit, mine: mine, theirs: server)
+                return
+            }
+            adopt(server, unit: unit)
+            return
+        }
+        if annotationDirty.contains(unit) { await pushAnnotations() }
     }
 
     private func sameContent(_ a: Annotations, _ b: Annotations) -> Bool {
@@ -1006,10 +1016,35 @@ final class BookSession: ObservableObject {
         }
     }
 
+    /// The put in flight, if any, and whether a change arrived while it
+    /// was: one put at a time, so a slow answer (the sprite waking, a poor
+    /// link) never has two puts from this device on the same base, the
+    /// second of which the server would call a conflict with the first.
+    private var annotationPut: Task<Void, Never>?
+    private var pushAgain = false
+
     /// Push the current unit's annotations on top of the version last
     /// agreed. The server's answer is either the stored version or a
-    /// conflict for the reader to settle.
+    /// conflict for the reader to settle. A push asked for while one is in
+    /// flight waits for it and goes after, on the version it stored.
     func pushAnnotations() async {
+        if let running = annotationPut {
+            pushAgain = true
+            await running.value
+            return
+        }
+        let put = Task { [self] in
+            repeat {
+                self.pushAgain = false
+                await self.putAnnotations()
+            } while self.pushAgain
+            self.annotationPut = nil
+        }
+        annotationPut = put
+        await put.value
+    }
+
+    private func putAnnotations() async {
         guard let unit = chapter?.unit, annotationDirty.contains(unit), conflict == nil else { return }
         let mine = localAnnotations(unit)
         let base = annotationVersions[unit] ?? 0
@@ -1037,8 +1072,11 @@ final class BookSession: ObservableObject {
             if chapter?.unit == c.unit { adopt(c.theirs, unit: c.unit) }
             conflict = nil
         case .mine:
+            // The choice is kept before the put goes, so a server that is
+            // away does not ask the same question on the next opening.
             annotationVersions[c.unit] = c.theirs.version
             annotationDirty.insert(c.unit)
+            persistAnnotationMeta()
             conflict = nil
             await pushAnnotations()
         case .agent:
@@ -1052,6 +1090,7 @@ final class BookSession: ObservableObject {
             if chapter?.unit == c.unit { adopt(a, unit: c.unit) }
             annotationVersions[c.unit] = c.theirs.version
             annotationDirty.insert(c.unit)
+            persistAnnotationMeta()
             conflict = nil
             await pushAnnotations()
         }

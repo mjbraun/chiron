@@ -22,7 +22,10 @@ func requestsRoot(cfg *Config, root string) string {
 }
 
 type changeRequest struct {
-	Text          string          `json:"text"`
+	Text string `json:"text"`
+	// ClientID is the id the app gave the request while it waited on the
+	// device; sent again under it, the request is the one already queued.
+	ClientID      string          `json:"client_id,omitempty"`
 	State         json.RawMessage `json:"state,omitempty"`
 	ScreenshotB64 string          `json:"screenshot_png_b64,omitempty"`
 }
@@ -42,7 +45,7 @@ func (s *Server) handleRequestCreate(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	req, err := s.requests.Create(in.Text, in.State, png)
+	req, err := s.requests.CreateOnce(in.ClientID, in.Text, in.State, png)
 	if err != nil {
 		writeError(w, http.StatusUnprocessableEntity, "%v", err)
 		return

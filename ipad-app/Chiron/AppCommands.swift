@@ -212,15 +212,13 @@ enum AppCommands {
         case "request":
             // "Request a change", as the card sends it.
             guard let text = args["text"] as? String else { throw Failure.badArguments("request needs text") }
-            guard let r = await library.requestChange(text, withPicture: args["picture"] as? Bool ?? true) else {
-                throw Failure.badArguments(library.requestError ?? "the request was not taken")
-            }
+            let r = await library.requestChange(text, withPicture: args["picture"] as? Bool ?? true)
             return ["id": r.id, "status": r.status]
         case "requests/card":
             library.requestsShown = args["open"] as? Bool ?? true
         case "requests":
             await library.refreshRequests()
-            return ["requests": library.requests.map { ["id": $0.id, "status": $0.status, "last": $0.last ?? "", "summary": $0.summary ?? "", "question": $0.question ?? ""] }]
+            return ["requests": library.shownRequests.map { ["id": $0.id, "status": $0.status, "last": $0.last ?? "", "summary": $0.summary ?? "", "question": $0.question ?? ""] }]
         case "requests/answer":
             // The answer to what the agent asked, as the card sends it.
             guard let id = args["id"] as? String, let answer = args["answer"] as? String else {
@@ -425,6 +423,7 @@ enum AppCommands {
             "build_offered": library.availableBuild?.label ?? "",
             "requests_card": library.requestsShown,
             "requests_waiting": library.waitingOnReader,
+            "requests_kept": library.queued.count,
             "settings_card": library.settingsShown,
             "break_time": library.breakTime,
             "capture_answer": library.captureAnswer ?? "",

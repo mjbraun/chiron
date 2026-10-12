@@ -147,6 +147,106 @@ final class AnnotationSyncTests: XCTestCase {
         XCTAssertEqual(fake.annotationPuts.last?.annotations.position, 0.11, "and a later one sent the latest position")
     }
 
+    /// A server that answers slowly (the sprite waking, a poor link) must
+    /// not see two puts on the same base from one device: the second would
+    /// be a conflict of the device with itself, and the card would show
+    /// the reader two copies of their own. A change made while a put is in
+    /// flight goes up after it, on the version it stored.
+    func testAChangeMadeWhileAPushIsInFlightGoesUpAfterIt() async throws {
+        let fake = FakeService()
+        var current = 0
+        fake.putDelay = 0.3
+        fake.onPutAnnotations = { _, _, a, base in
+            if base != current {
+                return .conflict(server: Annotations(version: current, updatedAt: nil, device: "iPad", marks: a.marks, inkB64: nil, position: 0))
+            }
+            current += 1
+            var stored = a; stored.version = current; return .stored(stored)
+        }
+        let s = session(fake)
+        openChapter(s)
+        try await settle()
+        s.addMark(kind: .highlight, start: 0, end: 7, text: "predict")
+        try await Task.sleep(nanoseconds: 150_000_000)
+        XCTAssertEqual(fake.annotationPuts.count, 1, "the mark's put is in flight")
+        s.recordPosition(unit: "u1", position: 0.4)
+        try await Task.sleep(nanoseconds: 900_000_000)
+        XCTAssertNil(s.conflict, "a device does not conflict with itself")
+        XCTAssertEqual(fake.annotationPuts.count, 2)
+        XCTAssertEqual(fake.annotationPuts.last?.base, 1, "the second put sits on the version the first stored")
+        XCTAssertEqual(fake.annotationPuts.last?.annotations.position, 0.4)
+    }
+
+    /// Keeping this device's copy puts it on top of the server's. A scroll
+    /// while that put is in flight must not raise the card again with the
+    /// copy just kept as "the server's".
+    func testKeepingThisDevicesCopyHoldsWhileItGoesUp() async throws {
+        let fake = FakeService()
+        var current = 5
+        let phone = Annotations(version: 5, updatedAt: nil, device: "iPhone", marks: [mark("phone")], inkB64: nil, position: 0.2)
+        fake.onPutAnnotations = { _, _, a, base in
+            if base != current { return .conflict(server: phone) }
+            current += 1
+            var stored = a; stored.version = current; return .stored(stored)
+        }
+        let s = session(fake)
+        openChapter(s)
+        try await settle()
+        s.addMark(kind: .highlight, start: 0, end: 7, text: "predict")
+        try await settle()
+        XCTAssertNotNil(s.conflict)
+
+        fake.putDelay = 0.3
+        let resolving = Task { await s.resolveConflict(.mine) }
+        try await Task.sleep(nanoseconds: 100_000_000)
+        s.recordPosition(unit: "u1", position: 0.9)
+        await resolving.value
+        try await Task.sleep(nanoseconds: 900_000_000)
+        XCTAssertNil(s.conflict, "the copy kept is not a conflict with itself")
+        XCTAssertEqual(s.marks.count, 1)
+        XCTAssertEqual(fake.annotationPuts.last?.base, 6, "the scroll went up on the version the kept copy got")
+        XCTAssertEqual(fake.annotationPuts.last?.annotations.position, 0.9)
+        XCTAssertEqual(current, 7)
+    }
+
+    /// Keeping this device's copy while the server is away: the choice is
+    /// remembered on the device, so the next opening does not ask again,
+    /// and the copy goes up then.
+    func testKeepingThisDevicesCopyIsRememberedWhenTheServerIsAway() async throws {
+        let fake = FakeService()
+        let phone = Annotations(version: 5, updatedAt: nil, device: "iPhone", marks: [mark("phone")], inkB64: nil, position: 0.2)
+        fake.onAnnotations = { _, _ in phone }
+        let storage = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let s = BookSession(subjectID: "ai", title: "AI", service: fake, storage: storage)
+        s.annotationPushDelay = 0.05
+        openChapter(s)
+        try await settle()
+        XCTAssertEqual(s.marks.map(\.id), ["phone"], "nothing here yet: the server's copy is taken")
+        s.addMark(kind: .highlight, start: 0, end: 7, text: "predict")
+        fake.onAnnotations = { _, _ in var v = phone; v.version = 6; return v }
+        fake.onPutAnnotations = { _, _, _, base in
+            if base < 6 { var v = phone; v.version = 6; return .conflict(server: v) }
+            throw URLError(.cannotConnectToHost)
+        }
+        try await settle()
+        XCTAssertNotNil(s.conflict)
+        await s.resolveConflict(.mine)
+        XCTAssertNil(s.conflict)
+        XCTAssertEqual(s.marks.count, 2)
+
+        // The book is opened again, the server still at version 6.
+        fake.onPutAnnotations = { _, _, a, base in var stored = a; stored.version = base + 1; return .stored(stored) }
+        let again = BookSession(subjectID: "ai", title: "AI", service: fake, storage: storage)
+        again.annotationPushDelay = 0.05
+        again.restoreForTesting()
+        openChapter(again)
+        try await settle()
+        XCTAssertNil(again.conflict, "the choice made was kept")
+        XCTAssertEqual(again.marks.count, 2, "and so was the copy")
+        XCTAssertEqual(fake.annotationPuts.last?.base, 6, "which goes up on opening, on top of the server's")
+        XCTAssertEqual(fake.annotationPuts.last?.annotations.marks.count, 2)
+    }
+
     func testTwoInksBecomeOne() {
         XCTAssertEqual(BookSession.overlay(nil, Data([1])), Data([1]))
         XCTAssertEqual(BookSession.overlay(Data([1]), Data([2])), Data([1]), "undecodable ink keeps the base")

@@ -104,40 +104,123 @@ final class Library: ObservableObject {
         self.order = LibrarySort(rawValue: defaults.string(forKey: "shelfOrder") ?? "") ?? .recent
         agent.attach(self)
         loadShelfCache()
+        loadQueue()
     }
 
     /// Change requests, newest first, as the server last told them.
     @Published var requests: [ChangeRequest] = []
     @Published var requestError: String?
 
+    /// A change request the sprite has not taken (asleep, away, a body cut
+    /// short on a poor link): kept on the device with where the reader
+    /// was when they asked, and sent when the sprite answers. Nothing for
+    /// the reader to send again.
+    struct QueuedRequest: Codable, Identifiable, Equatable {
+        var id: String
+        var text: String
+        var createdAt: String
+        /// The harness state at the ask, as JSON.
+        var state: Data
+        var pngB64: String?
+        /// Why the last try did not go, for the row.
+        var lastError: String?
+    }
+    /// What waits on the device, in the order asked.
+    @Published private(set) var queued: [QueuedRequest] = []
+    private var sendingQueue = false
+
+    /// The requests as the card lists them: what waits here, newest first,
+    /// then the server's.
+    var shownRequests: [ChangeRequest] { queued.reversed().map(Self.placeholder) + requests }
+
+    private static func placeholder(_ q: QueuedRequest) -> ChangeRequest {
+        var last = "Kept on this device until the sprite takes it."
+        if let why = q.lastError { last += " Last try: \(why)." }
+        return ChangeRequest(id: q.id, text: q.text, status: ChangeRequest.keptHere, createdAt: q.createdAt, log: [],
+                             last: last, summary: nil, reason: nil, commit: nil, build: nil)
+    }
+
+    private var queueURL: URL { storage.appendingPathComponent("requests-queued.json") }
+
+    private func saveQueue() {
+        try? FileManager.default.createDirectory(at: storage, withIntermediateDirectories: true)
+        if queued.isEmpty {
+            try? FileManager.default.removeItem(at: queueURL)
+        } else if let d = try? JSONEncoder().encode(queued) {
+            try? d.write(to: queueURL)
+        }
+    }
+
+    private func loadQueue() {
+        guard let d = try? Data(contentsOf: queueURL),
+              let q = try? JSONDecoder().decode([QueuedRequest].self, from: d) else { return }
+        queued = q
+    }
+
+    /// Send what waits on the device, in order, until one does not go.
+    /// What each became on the sprite, by the id it had here.
+    @discardableResult
+    func sendQueued() async -> [String: ChangeRequest] {
+        var sent: [String: ChangeRequest] = [:]
+        guard !sendingQueue else { return sent }
+        sendingQueue = true
+        defer { sendingQueue = false }
+        while let q = queued.first {
+            let state = ((try? JSONSerialization.jsonObject(with: q.state)) as? [String: Any]) ?? [:]
+            do {
+                let r = try await service.requestChange(text: q.text, state: state, screenshotPNG: q.pngB64.flatMap { Data(base64Encoded: $0) }, clientID: q.id)
+                queued.removeAll { $0.id == q.id }
+                saveQueue()
+                sent[q.id] = r
+                notices.prepare()
+            } catch {
+                if let i = queued.firstIndex(where: { $0.id == q.id }) { queued[i].lastError = Self.describe(error) }
+                saveQueue()
+                break
+            }
+        }
+        return sent
+    }
+
+    private static func describe(_ error: Error) -> String {
+        if let s = error as? ServiceError, case .status(let code) = s { return "the server answered \(code)" }
+        return error.localizedDescription
+    }
+
     /// Ask the agent on the sprite for a change, with where the reader is
     /// (the harness state and, if wanted, a screenshot) so it can see what
-    /// was meant. Returns the queued request, or nil with requestError set.
+    /// was meant. The picture is whatever shows the problem best: one the
+    /// reader picked, or failing that a picture of where they were when
+    /// they asked. Returns the request as the sprite queued it, or as it
+    /// waits on the device when the sprite did not take it.
     @discardableResult
-    /// A change for the agent on the sprite. The picture is whatever shows
-    /// the problem best: one the reader picked, or failing that a picture of
-    /// where they were when they asked.
-    func requestChange(_ text: String, withPicture: Bool, picture: Data? = nil) async -> ChangeRequest? {
+    func requestChange(_ text: String, withPicture: Bool, picture: Data? = nil) async -> ChangeRequest {
         var state: [String: Any] = [:]
         var png: Data? = picture
         #if DEBUG
         state = AppCommands.state(self).filter { JSONSerialization.isValidJSONObject([$0.key: $0.value]) }
         if png == nil, withPicture { png = try? AppCommands.screenshot() }
         #endif
-        do {
-            let r = try await service.requestChange(text: text, state: state, screenshotPNG: png)
-            requestError = nil
-            notices.prepare()
-            await refreshRequests()
-            return r
-        } catch {
-            requestError = "The sprite did not take the request. Try again."
-            return nil
-        }
+        let q = QueuedRequest(id: "kept-\(UUID().uuidString.lowercased().prefix(8))", text: text,
+                              createdAt: ISO8601DateFormatter().string(from: Date()),
+                              state: (try? JSONSerialization.data(withJSONObject: state)) ?? Data("{}".utf8),
+                              pngB64: png?.base64EncodedString(), lastError: nil)
+        queued.append(q)
+        saveQueue()
+        requestError = nil
+        let sent = await sendQueued()
+        await refreshRequests()
+        if let r = sent[q.id] { return r }
+        return queued.first(where: { $0.id == q.id }).map(Self.placeholder) ?? Self.placeholder(q)
     }
 
     func refreshRequests() async {
-        guard let list = try? await service.changeRequests() else { return }
+        await sendQueued()
+        guard let list = try? await service.changeRequests() else {
+            // The sprite is away; what waits here is tried again later.
+            if !queued.isEmpty { watchRequests() }
+            return
+        }
         requests = list
         // A request that was in the agent's hands and is out of them now:
         // done, failed, or stopped on a question for the reader.
@@ -187,10 +270,11 @@ final class Library: ObservableObject {
         }
     }
 
-    /// While a request is in the agent's hands the app checks back on its
-    /// own, card open or not, so the reader hears when it is done.
+    /// While a request is in the agent's hands, or waits on the device for
+    /// the sprite, the app checks back on its own, card open or not, so
+    /// the request goes and the reader hears when it is done.
     private func watchRequests() {
-        guard !openRequests.isEmpty, requestPoller == nil else { return }
+        guard !openRequests.isEmpty || !queued.isEmpty, requestPoller == nil else { return }
         requestPoller = Task { [weak self] in
             guard let self else { return }
             try? await Task.sleep(nanoseconds: UInt64(self.requestPollInterval * 1_000_000_000))
@@ -202,7 +286,7 @@ final class Library: ObservableObject {
 
     /// Something the reader is waiting on: a primer or a book being
     /// written, a change request in the agent's hands.
-    var awaiting: Bool { !writing.isEmpty || !openRequests.isEmpty }
+    var awaiting: Bool { !writing.isEmpty || !openRequests.isEmpty || !queued.isEmpty }
 
     /// Whatever was being written at the last look and is done now gets
     /// a word to the reader; whatever is being written now is remembered.

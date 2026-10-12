@@ -25,6 +25,9 @@ final class FakeService: ChironService {
                               position: max(mine.position, theirs.position), inkB64: mine.inkB64 ?? theirs.inkB64, inkOtherB64: nil)
     }
     var annotationPuts: [(unit: String, annotations: Annotations, base: Int)] = []
+    /// How long a put takes to answer: a slow link, for tests of what
+    /// happens while one is in flight.
+    var putDelay: TimeInterval = 0
     var annotationPulls: [String] = []
     var reconciles: [(mine: Annotations, theirs: Annotations)] = []
     var onCreateShelf: (String) throws -> ShelfInfo = { ShelfInfo(id: "s-\($0)", name: $0) }
@@ -60,7 +63,7 @@ final class FakeService: ChironService {
     var documentsDeleted: [String] = []
     var onDocumentInk: (String) throws -> [Int: PageInk] = { _ in [:] }
     var onLatestBuild: () throws -> AppBuild = { throw URLError(.cannotConnectToHost) }
-    var requests: [(text: String, state: [String: Any], png: Data?)] = []
+    var requests: [(text: String, state: [String: Any], png: Data?, clientID: String)] = []
     var onRequestChange: (String, [String: Any], Data?) throws -> ChangeRequest = { _, _, _ in throw URLError(.cannotConnectToHost) }
     var onChangeRequests: () throws -> [ChangeRequest] = { [] }
     var answers: [(id: String, answer: String)] = []
@@ -125,6 +128,7 @@ final class FakeService: ChironService {
     }
     func putAnnotations(subject: String, unit: String, _ a: Annotations, baseVersion: Int) async throws -> AnnotationsPut {
         annotationPuts.append((unit, a, baseVersion))
+        if putDelay > 0 { try? await Task.sleep(nanoseconds: UInt64(putDelay * 1_000_000_000)) }
         return try onPutAnnotations(subject, unit, a, baseVersion)
     }
     func reconcileAnnotations(subject: String, unit: String, mine: Annotations, theirs: Annotations) async throws -> ReconciledAnnotations {
@@ -176,8 +180,8 @@ final class FakeService: ChironService {
     func deleteDocument(id: String) async throws { documentsDeleted.append(id) }
     func documentInk(id: String) async throws -> [Int: PageInk] { try onDocumentInk(id) }
     func latestBuild() async throws -> AppBuild { try onLatestBuild() }
-    func requestChange(text: String, state: [String: Any], screenshotPNG: Data?) async throws -> ChangeRequest {
-        requests.append((text, state, screenshotPNG))
+    func requestChange(text: String, state: [String: Any], screenshotPNG: Data?, clientID: String) async throws -> ChangeRequest {
+        requests.append((text, state, screenshotPNG, clientID))
         return try onRequestChange(text, state, screenshotPNG)
     }
     func changeRequests() async throws -> [ChangeRequest] { try onChangeRequests() }

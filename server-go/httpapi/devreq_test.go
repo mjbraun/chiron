@@ -53,6 +53,29 @@ func TestAChangeRequestIsQueuedAndListed(t *testing.T) {
 	}
 }
 
+// A request the app sends again under the id it gave it (the reply to
+// the first sending was lost) comes back as the request already queued.
+func TestAChangeRequestSentTwiceIsQueuedOnce(t *testing.T) {
+	s := newServer(t, "sekrit")
+	s.requests = devreq.Open(t.TempDir())
+	body := `{"text":"the pen is too thin","client_id":"kept-1a2b3c4d"}`
+	w := do(t, s, "POST", "/dev/requests", body, "sekrit")
+	var first devreq.Request
+	json.Unmarshal(w.Body.Bytes(), &first)
+	w = do(t, s, "POST", "/dev/requests", body, "sekrit")
+	var again devreq.Request
+	json.Unmarshal(w.Body.Bytes(), &again)
+	if w.Code != 200 || again.ID != first.ID || first.ID == "" {
+		t.Errorf("sent twice: %d %s, first %s", w.Code, w.Body, first.ID)
+	}
+	w = do(t, s, "GET", "/dev/requests", "", "sekrit")
+	var list []devreq.Request
+	json.Unmarshal(w.Body.Bytes(), &list)
+	if len(list) != 1 {
+		t.Errorf("list: %s", w.Body)
+	}
+}
+
 // The app answers a request the agent stopped to ask about.
 func TestAnAnswerGoesToAWaitingRequest(t *testing.T) {
 	s := newServer(t, "sekrit")

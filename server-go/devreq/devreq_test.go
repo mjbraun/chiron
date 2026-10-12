@@ -66,6 +66,35 @@ func ids(rs []*Request) []string {
 // The agent can stop and ask. The request waits with its question; an
 // answer goes on the thread and queues it again, and only a waiting
 // request takes one.
+// The app keeps a request on the device until the sprite takes it, and
+// sends it again when a reply was lost; the id it gave the request makes
+// the second sending the same request, not a second one.
+func TestARequestSentAgainUnderItsOwnIDIsTheSameRequest(t *testing.T) {
+	s := Open(t.TempDir())
+	first, err := s.CreateOnce("kept-1a2b3c4d", "make the pen thicker", json.RawMessage(`{"screen":"reading"}`), []byte("PNG"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.ClientID != "kept-1a2b3c4d" {
+		t.Errorf("client id not kept: %+v", first)
+	}
+	again, err := s.CreateOnce("kept-1a2b3c4d", "make the pen thicker", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again.ID != first.ID {
+		t.Errorf("sent again = %s, want %s", again.ID, first.ID)
+	}
+	other, _ := s.CreateOnce("kept-ffffffff", "and bluer", nil, nil)
+	none, _ := s.CreateOnce("", "no id at all", nil, nil)
+	if other.ID == first.ID || none.ID == first.ID || none.ClientID != "" {
+		t.Errorf("other = %s, none = %+v", other.ID, none)
+	}
+	if list, _ := s.List(); len(list) != 3 {
+		t.Errorf("list: %v", ids(list))
+	}
+}
+
 func TestAWaitingRequestTakesAnAnswerAndQueuesAgain(t *testing.T) {
 	s := Open(t.TempDir())
 	r, _ := s.Create("make the shelf nicer", nil, nil)

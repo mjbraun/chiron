@@ -102,7 +102,7 @@ final class LibraryTests: XCTestCase {
         let library = library(fake)
         await library.launch()
         let sent = await library.requestChange("the pen is too thin", withPicture: true)
-        XCTAssertEqual(sent?.id, "req-1")
+        XCTAssertEqual(sent.id, "req-1")
         XCTAssertEqual(fake.requests.count, 1)
         XCTAssertEqual(fake.requests[0].text, "the pen is too thin")
         XCTAssertEqual(fake.requests[0].state["screen"] as? String, "bookshelf", "the harness state travels")
@@ -114,9 +114,51 @@ final class LibraryTests: XCTestCase {
         XCTAssertNil(fake.requests[1].png)
 
         fake.onRequestChange = { _, _, _ in throw URLError(.cannotConnectToHost) }
-        let lost = await library.requestChange("lost", withPicture: false)
-        XCTAssertNil(lost)
-        XCTAssertNotNil(library.requestError)
+        let kept = await library.requestChange("lost", withPicture: false)
+        XCTAssertEqual(kept.status, ChangeRequest.keptHere, "a request the sprite does not take waits on the device")
+        XCTAssertNil(library.requestError)
+    }
+
+    /// A request the sprite does not take (asleep, away, a body cut short
+    /// on a poor link) is not lost and not the reader's to send again: it
+    /// is kept on the device, shown among the requests, and sent when the
+    /// sprite answers, with where the reader was when they asked.
+    func testARequestTheSpriteDoesNotTakeIsKeptOnTheDeviceAndSentLater() async throws {
+        let fake = FakeService()
+        fake.onSubjects = { [unowned self] in self.subjects("ready") }
+        fake.onRequestChange = { _, _, _ in throw ServiceError.status(400) }
+        let library = library(fake)
+        let notices = try fakeNotices(library)
+        await library.launch()
+        let kept = await library.requestChange("a thicker pen", withPicture: true)
+        XCTAssertEqual(kept.status, ChangeRequest.keptHere)
+        XCTAssertEqual(kept.text, "a thicker pen")
+        XCTAssertNil(library.requestError, "nothing for the reader to do")
+        XCTAssertEqual(library.queued.count, 1)
+        XCTAssertEqual(library.shownRequests.map(\.status), [ChangeRequest.keptHere], "it shows among the requests")
+        XCTAssertTrue(library.shownRequests[0].open, "and counts as in hand")
+        XCTAssertEqual(notices.prepared, 0, "nothing is coming yet")
+
+        // The queue survives a relaunch.
+        let again = Library(storage: library.storage, service: fake)
+        XCTAssertEqual(again.queued.map(\.text), ["a thicker pen"])
+
+        // The sprite answers: the request goes as it was asked.
+        let tries = fake.requests.count
+        fake.onRequestChange = { text, _, _ in
+            ChangeRequest(id: "req-1", text: text, status: "queued", createdAt: "2026-10-12T23:00:00Z", log: [], last: nil, summary: nil, reason: nil, commit: nil, build: nil)
+        }
+        fake.onChangeRequests = { [ChangeRequest(id: "req-1", text: "a thicker pen", status: "working", createdAt: "2026-10-12T23:00:00Z", log: [], last: "working", summary: nil, reason: nil, commit: nil, build: nil)] }
+        try await wait(for: "the send") { library.queued.isEmpty }
+        XCTAssertEqual(fake.requests.count, tries + 1)
+        XCTAssertEqual(fake.requests.last?.text, "a thicker pen")
+        XCTAssertEqual(fake.requests.last?.state["screen"] as? String, "bookshelf", "where the reader was when they asked")
+        XCTAssertNotNil(fake.requests.last?.png, "and the picture")
+        XCTAssertEqual(fake.requests.last?.clientID, kept.id, "under the id it had here, so a lost reply does not make two")
+        XCTAssertEqual(notices.prepared, 1)
+        try await wait(for: "the list") { library.requests.first?.id == "req-1" }
+        XCTAssertEqual(library.shownRequests.map(\.id), ["req-1"])
+        XCTAssertTrue(library.awaiting)
     }
 
     /// Launch lands on the shelf: the active book is known, and its card

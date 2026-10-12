@@ -5,6 +5,30 @@ symptom, the cause, what to do. Add to it in the same commit as the fix.
 
 ## iPad app
 
+- **"Two copies" kept coming back after "Keep this device's copy"
+  (2026-10-12).** The server was being redeployed under the reader and
+  the gate answered 502 while it came up, so a put of the unit's marks
+  and position sat in its retries for seconds. The push's debounce had
+  already let go, so the next scroll sent a second put on the same base
+  version; the first stored, the second was a 409, and the card showed
+  the reader their own copy as "the server's (last from iPad)". Keeping
+  this device's copy sent a third put, a scroll during it a fourth on
+  the same base, and so on. One put in flight at a time now: a change
+  during it goes after it, on the version it stored. The choice is also
+  persisted before its put goes, and a dirty copy goes up on opening
+  when the server has nothing newer. The sign on the server: the
+  conflict's "theirs" names this device, and nothing in the log, since
+  a 409 is not logged.
+- **A change request lost to a 400 "bad request body: unexpected EOF"
+  (2026-10-12).** The screenshot's body was cut short on a poor link,
+  the server answered 400, and Sync does not retry an answered request,
+  so the reader saw "The sprite did not take the request. Try again."
+  Requests now wait on the device (`requests-queued.json` under the
+  library's storage) and go when the sprite answers; the request carries
+  the id it had on the device as `client_id`, and `POST /dev/requests`
+  returns the request already queued under it, so a reply lost after
+  the sprite took it does not make a second request.
+
 - **Liquid Glass swallows taps (2026-09-03, again 09-04).** Buttons on a
   view with `.glassEffect()` (plain or `.interactive()`) do not get their
   taps, and the same for a card with buttons on it. Use

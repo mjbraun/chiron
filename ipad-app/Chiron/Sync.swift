@@ -53,7 +53,7 @@ protocol ChironService: AnyObject {
     func documentInk(id: String) async throws -> [Int: PageInk]
     func putDocumentInk(id: String, page: Int, inkB64: String, baseVersion: Int) async throws -> PageInkPut
     func latestBuild() async throws -> AppBuild
-    func requestChange(text: String, state: [String: Any], screenshotPNG: Data?) async throws -> ChangeRequest
+    func requestChange(text: String, state: [String: Any], screenshotPNG: Data?, clientID: String) async throws -> ChangeRequest
     func changeRequests() async throws -> [ChangeRequest]
     func answerRequest(id: String, answer: String) async throws -> ChangeRequest
     func alerts(since: String?) async throws -> [MachineAlert]
@@ -388,8 +388,10 @@ final class Sync: ObservableObject, ChironService {
     }
 
     /// "Request a change": the words, where the reader was, and a picture.
-    func requestChange(text: String, state: [String: Any], screenshotPNG: Data?) async throws -> ChangeRequest {
-        var body: [String: Any] = ["text": text, "state": state]
+    /// The id is the one the request had on the device: sent again under
+    /// it after a lost reply, it is the request already queued.
+    func requestChange(text: String, state: [String: Any], screenshotPNG: Data?, clientID: String) async throws -> ChangeRequest {
+        var body: [String: Any] = ["text": text, "state": state, "client_id": clientID]
         if let png = screenshotPNG { body["screenshot_png_b64"] = png.base64EncodedString() }
         return try await post("/dev/requests", body: try JSONSerialization.data(withJSONObject: body), timeout: 30)
     }

@@ -927,6 +927,10 @@ struct ChangeRequest: Codable, Identifiable, Equatable {
         case createdAt = "created_at"
     }
 
+    /// The status of a request the sprite has not taken yet: it waits on
+    /// the device and goes when the sprite answers.
+    static let keptHere = "kept here"
+
     /// Stopped on a question for the reader.
     var waiting: Bool { status == "waiting" }
 

@@ -32,7 +32,10 @@ const (
 )
 
 type Request struct {
-	ID        string    `json:"id"`
+	ID string `json:"id"`
+	// ClientID is the id the app gave the request before the sprite took
+	// it; a request sent again under it is this one, not a second.
+	ClientID  string    `json:"client_id,omitempty"`
 	Text      string    `json:"text"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
@@ -93,6 +96,25 @@ func (s *Store) Dir() string { return s.dir }
 
 // Create queues a request. The screenshot, if any, is written beside it.
 func (s *Store) Create(text string, state json.RawMessage, screenshotPNG []byte) (*Request, error) {
+	return s.CreateOnce("", text, state, screenshotPNG)
+}
+
+// CreateOnce queues a request under the id the app gave it, unless one
+// with that id is already here: the app keeps a request on the device
+// until the sprite takes it and sends it again when the reply was lost,
+// and the second sending is the same request. An empty id is no id.
+func (s *Store) CreateOnce(clientID, text string, state json.RawMessage, screenshotPNG []byte) (*Request, error) {
+	if clientID != "" {
+		list, err := s.List()
+		if err != nil {
+			return nil, err
+		}
+		for _, r := range list {
+			if r.ClientID == clientID {
+				return r, nil
+			}
+		}
+	}
 	text = strings.TrimSpace(text)
 	if text == "" {
 		return nil, errors.New("a request says what to change")
@@ -102,6 +124,7 @@ func (s *Store) Create(text string, state json.RawMessage, screenshotPNG []byte)
 	now := time.Now().UTC()
 	r := &Request{
 		ID:        fmt.Sprintf("req-%s-%s", now.Format("20060102-150405"), hex.EncodeToString(b[:])),
+		ClientID:  clientID,
 		Text:      text,
 		CreatedAt: now, UpdatedAt: now,
 		Status: Queued,

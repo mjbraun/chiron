@@ -56,13 +56,13 @@ struct RequestsCard: View {
                     }
                     .disabled(sending || text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 } footer: {
-                    Text("The agent on the sprite makes the change, runs the tests, and builds the app on the MacBook. Watch it here; Install appears when the build is ready.")
+                    Text("The agent on the sprite makes the change, runs the tests, and builds the app on the MacBook. Watch it here; Install appears when the build is ready. A request the sprite does not take waits on this device and goes when it can.")
                 }
                 Section("Requests") {
-                    if library.requests.isEmpty {
+                    if library.shownRequests.isEmpty {
                         Text("None yet.").foregroundStyle(.secondary)
                     }
-                    ForEach(library.requests) { r in
+                    ForEach(library.shownRequests) { r in
                         RequestRow(request: r)
                     }
                 }
@@ -81,8 +81,9 @@ struct RequestsCard: View {
             }
             .task {
                 await library.refreshRequests()
-                // A request in the agent's hands moves; keep up while the card is open.
-                while !Task.isCancelled, library.requests.contains(where: \.open) {
+                // A request in the agent's hands moves, and one kept here
+                // is to send; keep up while the card is open.
+                while !Task.isCancelled, library.shownRequests.contains(where: \.open) {
                     try? await Task.sleep(for: .seconds(5))
                     await library.refreshRequests()
                     await library.checkForBuild()
@@ -104,11 +105,12 @@ struct RequestsCard: View {
         let t = text
         sending = true
         Task {
-            if await library.requestChange(t, withPicture: withPicture, picture: picture) != nil {
-                text = ""
-                picture = nil
-                picked = nil
-            }
+            // Sent, or kept on the device until it can be: either way it
+            // is out of the reader's hands.
+            await library.requestChange(t, withPicture: withPicture, picture: picture)
+            text = ""
+            picture = nil
+            picked = nil
             sending = false
         }
     }
@@ -215,7 +217,7 @@ struct StatusPill: View {
         switch status {
         case "ready": return .green
         case "failed": return .red
-        case "queued": return .secondary
+        case "queued", ChangeRequest.keptHere: return .secondary
         case "waiting": return .orange
         default: return .blue
         }
