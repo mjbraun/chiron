@@ -121,7 +121,7 @@ struct ReaderView: UIViewRepresentable {
             context.coordinator.assetScheme = BookAssetScheme(assets: assets)
             config.setURLSchemeHandler(context.coordinator.assetScheme, forURLScheme: BookAssets.scheme)
         }
-        let web = WKWebView(frame: .zero, configuration: config)
+        let web = BookWebView(frame: .zero, configuration: config)
         web.isInspectable = true
         web.backgroundColor = .systemBackground
         web.scrollView.backgroundColor = .systemBackground
@@ -209,6 +209,11 @@ struct ReaderView: UIViewRepresentable {
 
         func attach(to web: WKWebView) {
             self.web = web
+            // "Send to Chiron" in the page's own selection menu: the
+            // passage goes where the capture tool's does.
+            (web as? BookWebView)?.onCapture = { [weak self] text in
+                Task { @MainActor in self?.session.capturePassage(text) }
+            }
 
             // The ink is a layer over the web view, not inside its scroll
             // view: WebKit holds touches inside its own scroll view for the
@@ -529,6 +534,9 @@ struct ReaderView: UIViewRepresentable {
                     canvas.resignFirstResponder()
                     web?.becomeFirstResponder()
                 }
+            case "selection":
+                // What the page has selected on its own, for its menu.
+                (web as? BookWebView)?.selection = body["text"] as? String ?? ""
             case "controls":
                 if let rects = body["rects"] as? [[Double]] {
                     canvas.controls = rects.filter { $0.count == 4 }.map { CGRect(x: $0[0], y: $0[1], width: $0[2], height: $0[3]) }
@@ -560,6 +568,38 @@ struct ReaderView: UIViewRepresentable {
 
 /// A drag across the page selects a run of text. Reports the drag as it
 /// moves (for the provisional highlight) and when it ends.
+
+/// The page's web view with one more item in its selection menu: the
+/// selected passage goes to Chiron, the way a PDF's does from its menu.
+/// The page reports its selection over the bridge as it changes, so the
+/// menu is built knowing whether there is one.
+final class BookWebView: WKWebView {
+    /// What the page has selected on its own; empty when nothing is.
+    var selection = ""
+    var onCapture: ((String) -> Void)?
+
+    override func buildMenu(with builder: any UIMenuBuilder) {
+        super.buildMenu(with: builder)
+        guard let item = Self.sendItem(for: selection, send: { [weak self] in self?.send() }) else { return }
+        builder.insertChild(item, atStartOfMenu: .standardEdit)
+    }
+
+    /// The menu's item, when there is a passage to send.
+    static func sendItem(for selection: String, send: @escaping () -> Void) -> UIMenu? {
+        guard !selection.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        let action = UIAction(title: "Send to Chiron", image: UIImage(systemName: "text.badge.plus")) { _ in send() }
+        return UIMenu(options: .displayInline, children: [action])
+    }
+
+    /// The passage goes over, and the selection with its handles goes.
+    func send() {
+        let text = selection.trimmingCharacters(in: .whitespacesAndNewlines)
+        selection = ""
+        guard !text.isEmpty else { return }
+        evaluateJavaScript("document.getSelection().removeAllRanges()")
+        onCapture?(text)
+    }
+}
 
 /// The ink layer over the page.
 final class PageInkCanvas: PKCanvasView {

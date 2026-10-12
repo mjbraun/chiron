@@ -266,7 +266,32 @@ else if (upright !== null) {
 // right edge; pre scrolls instead (its white-space does not wrap).
 if (!/#chapter\s*{[^}]*overflow-wrap:\s*anywhere/.test(uprightRule ? css : "")) layoutFail("the chapter does not break long words");
 
-const total = cases.length + choiceCases.length + positionCases.length + 1 + restoreCases.length + 1 + selectionCases + mathCases.length + 3 + 2;
-failed += selectionFailed + mathFailed + renderFailed + layoutFailed;
+// The page's own selection (a finger's press, WebKit's handles) is
+// reported to the native side as it changes, so "Send to Chiron" can be
+// offered in its menu: once per change, never for a field's selection.
+const posted = [];
+sandbox.window.webkit = { messageHandlers: { bridge: { postMessage: (m) => posted.push(m) } } };
+let selected = "";
+sandbox.document.getSelection = () => ({ toString: () => selected });
+sandbox.document.activeElement = null;
+let reportFailed = 0;
+const reportFail = (msg) => { reportFailed++; console.log(`FAIL selection report: ${msg}`); };
+selected = " a passage ";
+sandbox.reportSelection();
+if (JSON.stringify(posted) !== JSON.stringify([{ type: "selection", text: "a passage" }])) reportFail(`a selection is reported trimmed, got ${JSON.stringify(posted)}`);
+sandbox.reportSelection();
+if (posted.length !== 1) reportFail("the same selection is not reported twice");
+selected = "";
+sandbox.reportSelection();
+if (posted.length !== 2 || posted[1].text !== "") reportFail(`a cleared selection is reported empty, got ${JSON.stringify(posted)}`);
+selected = "typed";
+sandbox.document.activeElement = { tagName: "TEXTAREA" };
+sandbox.reportSelection();
+if (posted.length !== 2) reportFail("a selection inside a field is the field's, not the book's");
+sandbox.document.activeElement = null;
+sandbox.window.webkit = undefined;
+
+const total = cases.length + choiceCases.length + positionCases.length + 1 + restoreCases.length + 1 + selectionCases + mathCases.length + 3 + 2 + 4;
+failed += selectionFailed + reportFailed + mathFailed + renderFailed + layoutFailed;
 console.log(`${total - failed}/${total} book.js cases pass`);
 process.exit(failed ? 1 : 0);

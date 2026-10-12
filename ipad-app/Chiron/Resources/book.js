@@ -86,6 +86,22 @@ document.addEventListener("focusout", () => {
   post({ type: "focus", tag: "" });
 });
 
+/* The page's own selection, a finger's press and drag with WebKit's
+ * handles, reported as it changes so the native side can offer "Send to
+ * Chiron" in the selection's menu. A selection inside a beat's field is
+ * the field's, not the book's. */
+let reportedSelection = "";
+function reportSelection() {
+  const el = document.activeElement;
+  const inField = !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA");
+  const sel = inField || !document.getSelection ? null : document.getSelection();
+  const text = sel ? String(sel).trim() : "";
+  if (text === reportedSelection) return;
+  reportedSelection = text;
+  post({ type: "selection", text });
+}
+document.addEventListener("selectionchange", reportSelection);
+
 /* The first element matching a selector, for the harness. */
 function elementRect(selector) {
   const el = document.querySelector(selector);
