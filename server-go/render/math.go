@@ -75,3 +75,77 @@ func inlineEnd(s string, open int) int {
 func isSpace(b byte) bool {
 	return b == ' ' || b == '\t' || b == '\n' || b == '\r' || b == '\f' || b == '\v'
 }
+
+// TeXDelimiters rewrites the math spans of rendered HTML from dollar
+// delimiters to KaTeX's backslash ones: `$x$` to `\(x\)`, `$$x$$` to
+// `\[x\]`. KaTeX's auto-render, given `$` as a delimiter, pairs any two
+// dollars in a run of text, so "about $33K MRR ... at $74.8K MRR" is set as
+// one equation; the print shell renders only the backslash delimiters, and
+// the spans are the server's own (findMathSpans), found in the text between
+// tags. Code is left as written, and a span never crosses a tag.
+func TeXDelimiters(html string) string {
+	var b strings.Builder
+	code := 0
+	i := 0
+	for i < len(html) {
+		lt := strings.IndexByte(html[i:], '<')
+		if lt < 0 {
+			lt = len(html) - i
+		}
+		if text := html[i : i+lt]; code > 0 {
+			b.WriteString(text)
+		} else {
+			b.WriteString(texDelimitText(text))
+		}
+		i += lt
+		if i >= len(html) {
+			break
+		}
+		gt := strings.IndexByte(html[i:], '>')
+		if gt < 0 {
+			b.WriteString(html[i:])
+			break
+		}
+		tag := html[i : i+gt+1]
+		switch {
+		case hasTag(tag, "code"), hasTag(tag, "pre"):
+			code++
+		case strings.HasPrefix(tag, "</code"), strings.HasPrefix(tag, "</pre"):
+			if code > 0 {
+				code--
+			}
+		}
+		b.WriteString(tag)
+		i += gt + 1
+	}
+	return b.String()
+}
+
+// hasTag reports whether tag opens the element name: `<code>` or `<code ...>`.
+func hasTag(tag, name string) bool {
+	if !strings.HasPrefix(tag, "<"+name) {
+		return false
+	}
+	rest := tag[1+len(name):]
+	return rest == ">" || strings.HasPrefix(rest, " ") || strings.HasPrefix(rest, "\n")
+}
+
+func texDelimitText(text string) string {
+	spans := findMathSpans(text)
+	if len(spans) == 0 {
+		return text
+	}
+	var b strings.Builder
+	prev := 0
+	for _, sp := range spans {
+		b.WriteString(text[prev:sp.start])
+		if strings.HasPrefix(text[sp.start:], "$$") {
+			b.WriteString(`\[` + text[sp.start+2:sp.end-2] + `\]`)
+		} else {
+			b.WriteString(`\(` + text[sp.start+1:sp.end-1] + `\)`)
+		}
+		prev = sp.end
+	}
+	b.WriteString(text[prev:])
+	return b.String()
+}

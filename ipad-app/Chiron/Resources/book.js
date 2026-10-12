@@ -342,17 +342,8 @@ function setScale(scale) {
   document.documentElement.style.setProperty("--scale", String(scale));
 }
 
-function renderMathIn(el) {
-  if (typeof renderMathInElement === "function") {
-    renderMathInElement(el, {
-      delimiters: [
-        { left: "$$", right: "$$", display: true },
-        { left: "$", right: "$", display: false },
-      ],
-      throwOnError: false,
-    });
-  }
-}
+/* renderMathIn comes from math.js, loaded first: the page sets only the
+ * spans the server took for math, not any two dollars in a sentence. */
 
 const BEAT_LABELS = {
   predict: "Predict before you read on",

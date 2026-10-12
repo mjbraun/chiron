@@ -159,15 +159,9 @@ private struct MathWebView: UIViewRepresentable {
               ul { margin: 0.2em 0 0.6em 1.2em; padding: 0; }
             </style>
             <script src="katex/katex.min.js"></script>
-            <script src="katex/contrib/auto-render.min.js"></script>
+            <script src="math.js"></script>
             </head><body><div id="c">\(escaped)</div>
-            <script>
-              renderMathInElement(document.getElementById('c'), {
-                delimiters: [{left:'$$',right:'$$',display:true},
-                             {left:'$',right:'$',display:false}],
-                throwOnError: false
-              });
-            </script></body></html>
+            <script>renderMathIn(document.getElementById('c'));</script></body></html>
             """
             web.loadHTMLString(html, baseURL: res)
         }

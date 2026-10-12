@@ -11,7 +11,8 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const src = readFileSync(join(here, "../ipad-app/Chiron/Resources/book.js"), "utf8");
+const res = join(here, "../ipad-app/Chiron/Resources");
+const src = readFileSync(join(res, "math.js"), "utf8") + "\n" + readFileSync(join(res, "book.js"), "utf8");
 const noop = () => {};
 const sandbox = {
   document: { addEventListener: noop, getElementById: () => null, querySelector: () => null },
@@ -158,7 +159,70 @@ answer = other;
 if (sandbox.endSelection(0, 0, 1, 1) !== other) selectionFail("a lift on text takes the run under it");
 const selectionCases = 13;
 
-const total = cases.length + choiceCases.length + positionCases.length + 1 + restoreCases.length + 1 + selectionCases;
-failed += selectionFailed;
+// What the page sets as math must be what the server protected as math
+// (server-go/render/math.go): KaTeX's own auto-render pairs any two
+// dollars in a run of text, so "about $33K MRR ... (Nous at $74.8K MRR" was
+// set as one italic equation. The spans here mirror the server's tests.
+const mathCases = [
+  ["The set $\\{1, 2\\}$ is small.", ["$\\{1, 2\\}$"], "an inline span"],
+  ["$$C = M \\oplus K$$", ["$$C = M \\oplus K$$"], "display math is one span, not two empty ones"],
+  ["It costs $5 or maybe $10 tops.", [], "prices are not math"],
+  ["for about $33K MRR of customers; a written SLA (Nous at $74.8K MRR, Feldera)", [], "two sums in one sentence are not math"],
+  ["A literal \\$ sign and $x$.", ["$x$"], "an escaped dollar is prose"],
+  ["$x $ is not a span", [], "a closer after a space does not close"],
+  ["A stray $ here.\n\nA new paragraph $y$.", ["$y$"], "an unclosed dollar does not cross a blank line"],
+  ["$a_*b_*c$ stays put.", ["$a_*b_*c$"], "emphasis inside math is math"],
+  ["Pay $5 for $x^2$ twice.", ["$x^2$"], "a price before a span does not take its opener"],
+];
+let mathFailed = 0;
+for (const [text, want, label] of mathCases) {
+  const got = sandbox.mathSpans(text).map((sp) => text.slice(sp.start, sp.end));
+  if (JSON.stringify(got) !== JSON.stringify(want)) {
+    mathFailed++;
+    console.log(`FAIL math ${label}: ${JSON.stringify(got)}, wanted ${JSON.stringify(want)}`);
+  }
+}
+
+// Setting a page: the walker splits each run of text at its spans and
+// renders those with KaTeX, leaving prose, code and already-set math as
+// they are. A small document stands in for the page here.
+function fakeNode(type, tag) {
+  const n = { nodeType: type, tagName: tag, childNodes: [], classList: { contains: (c) => (n.className || "").split(" ").includes(c) } };
+  n.appendChild = (c) => { n.childNodes.push(c); c.parentNode = n; return c; };
+  n.replaceChild = (nu, old) => {
+    const i = n.childNodes.indexOf(old);
+    const kids = nu.nodeType === 11 ? nu.childNodes : [nu];
+    n.childNodes.splice(i, 1, ...kids);
+    kids.forEach((k) => (k.parentNode = n));
+  };
+  return n;
+}
+const fakeDoc = {
+  createTextNode: (t) => Object.assign(fakeNode(3), { nodeValue: t }),
+  createElement: (tag) => fakeNode(1, tag.toUpperCase()),
+  createDocumentFragment: () => fakeNode(11),
+};
+const textOf = (n) => n.nodeType === 3 ? n.nodeValue : n.childNodes.map(textOf).join("");
+sandbox.katex = { render: (tex, el, opts) => { el.className = "katex"; el.childNodes = [Object.assign(fakeNode(3), { nodeValue: `[${opts.displayMode ? "D" : "I"}:${tex}]` })]; } };
+const page = fakeNode(1, "DIV");
+const para = page.appendChild(fakeDoc.createElement("p"));
+const t1 = para.appendChild(fakeDoc.createTextNode("about $33K MRR (Nous at $74.8K MRR) and $x^2$ then "));
+t1.ownerDocument = fakeDoc;
+const code = para.appendChild(fakeDoc.createElement("code"));
+const t2 = code.appendChild(fakeDoc.createTextNode("$a$"));
+t2.ownerDocument = fakeDoc;
+const t3 = page.appendChild(fakeDoc.createTextNode("$$E=mc^2$$"));
+t3.ownerDocument = fakeDoc;
+sandbox.renderMathIn(page);
+const once = textOf(page);
+sandbox.renderMathIn(page);
+let renderFailed = 0;
+const renderFail = (msg) => { renderFailed++; console.log(`FAIL render ${msg}`); };
+if (once !== "about $33K MRR (Nous at $74.8K MRR) and [I:x^2] then $a$[D:E=mc^2]") renderFail(`a page sets only its math: ${JSON.stringify(once)}`);
+if (textOf(page) !== once) renderFail(`setting a page twice changes it: ${JSON.stringify(textOf(page))}`);
+if (para.childNodes.length !== 4 || para.childNodes[1].className !== "katex") renderFail("the span is set in place of its text");
+
+const total = cases.length + choiceCases.length + positionCases.length + 1 + restoreCases.length + 1 + selectionCases + mathCases.length + 3;
+failed += selectionFailed + mathFailed + renderFailed;
 console.log(`${total - failed}/${total} book.js cases pass`);
 process.exit(failed ? 1 : 0);

@@ -683,12 +683,15 @@ func (r *Renderer) shell(content, extraCSS, rhLeft, rhRight string) string {
 ` + baseCSS() + `
 ` + chromeCSS() + `
 ` + extraCSS + `
-</style></head><body><div id="src">` + content + `</div><div id="pages"></div>
+</style></head><body><div id="src">` + render.TeXDelimiters(content) + `</div><div id="pages"></div>
 <script>
 document.addEventListener("DOMContentLoaded", function() {
+  // Backslash delimiters only: the server's math spans were rewritten to
+  // them (render.TeXDelimiters), and a "$" delimiter would pair any two
+  // dollar amounts in a sentence into one equation.
   renderMathInElement(document.body, {
-    delimiters: [{left: "$$", right: "$$", display: true},
-                 {left: "$", right: "$", display: false}],
+    delimiters: [{left: "\\[", right: "\\]", display: true},
+                 {left: "\\(", right: "\\)", display: false}],
     throwOnError: false
   });
 ` + paginatorJS(string(left), string(right)) + `

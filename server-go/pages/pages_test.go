@@ -439,3 +439,23 @@ func TestRendererOffRefusesWithoutABrowser(t *testing.T) {
 		t.Fatalf("got %v", err)
 	}
 }
+
+// The print shell sets only the spans the server takes for math. KaTeX's
+// auto-render with `$` as a delimiter paired "about $33K MRR" with "at
+// $74.8K MRR" into one equation; the shell now renders backslash
+// delimiters only, and the content's spans are rewritten to them.
+func TestShellSetsOnlyServerMath(t *testing.T) {
+	r := &Renderer{KatexDir: "k", CacheDir: "c"}
+	ch := &render.Chapter{
+		Unit:  "u1",
+		Title: "Dollars",
+		HTML:  `<p>about $33K MRR of customers (Nous at $74.8K MRR) and $x^2$.</p>`,
+	}
+	doc := r.wrap(ch)
+	if !strings.Contains(doc, `about $33K MRR of customers (Nous at $74.8K MRR) and \(x^2\).`) {
+		t.Errorf("dollar amounts are prose and the span is backslash-delimited; got:\n%s", doc)
+	}
+	if strings.Contains(doc, `left: "$",`) {
+		t.Errorf("the shell still offers `$` as a delimiter, which pairs any two dollars")
+	}
+}

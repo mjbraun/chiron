@@ -549,3 +549,17 @@ symptom, the cause, what to do. Add to it in the same commit as the fix.
   `xcodebuild test -destination 'platform=macOS,variant=Mac Catalyst'
   -only-testing:ChironUITests/SheetsUITests`. In the Simulator it passes
   either way.
+- **The server and KaTeX disagreed about a dollar (2026-10-12).** The
+  server's `findMathSpans` takes "costs $5 or $10" as prose (an opener is
+  not followed by a space, a closer not preceded by one), and its test
+  says so - but it then shipped the dollars raw, and KaTeX's auto-render,
+  given `$` as a delimiter, pairs any two dollars in a run of text. A
+  primer with "about $33K MRR ... (Nous at $74.8K MRR" read as one italic
+  equation on the iPad and would have on paper. The page now applies the
+  server's rules itself (`Resources/math.js`, also the native math card)
+  and sets only those spans, and the print shell renders only backslash
+  delimiters after `render.TeXDelimiters` rewrites the server's spans to
+  them. The fix had to be in the page script: a chapter is delivered in
+  an exchange and cached by the app, so a renderer change alone would
+  never have reached the chapter being read. The span cases live in both
+  `render_test.go` and `scripts/test-book-js.mjs`; keep them the same.

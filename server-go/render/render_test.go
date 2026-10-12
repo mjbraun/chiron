@@ -185,3 +185,27 @@ func TestRevealOptionsAlwaysCarryCorrect(t *testing.T) {
 		t.Fatalf("every reveal option must carry correct, got %s", raw)
 	}
 }
+
+// The print shell (pages) hands chapter HTML to KaTeX's auto-render, whose
+// own rule pairs any two dollars in a run of text: "about $33K MRR ... at
+// $74.8K MRR" was set as one equation on paper as it was on the iPad. The
+// shell renders only backslash delimiters, and the server's spans are
+// rewritten to them, outside tags and code, before the page is built.
+func TestTeXDelimiters(t *testing.T) {
+	cases := []struct{ name, in, want string }{
+		{"inline span", `<p>The set $\{1, 2\}$ is small.</p>`, `<p>The set \(\{1, 2\}\) is small.</p>`},
+		{"display span", `<p>$$C = M \oplus K$$</p>`, `<p>\[C = M \oplus K\]</p>`},
+		{"two sums are prose", `<p>about $33K MRR; (Nous at $74.8K MRR)</p>`, `<p>about $33K MRR; (Nous at $74.8K MRR)</p>`},
+		{"code is left alone", `<p>run <code>echo $x$y</code> and $x$</p>`, `<p>run <code>echo $x$y</code> and \(x\)</p>`},
+		{"a fence is left alone", "<pre><code>$a$\n$b$</code></pre><p>$a$</p>", "<pre><code>$a$\n$b$</code></pre><p>\\(a\\)</p>"},
+		{"a span does not cross a tag", `<p>$a <em>b</em> c$</p>`, `<p>$a <em>b</em> c$</p>`},
+		{"escaped math keeps its entities", `<p>$x_{&lt;t}$</p>`, `<p>\(x_{&lt;t}\)</p>`},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := TeXDelimiters(c.in); got != c.want {
+				t.Errorf("TeXDelimiters(%q)\n got: %s\nwant: %s", c.in, got, c.want)
+			}
+		})
+	}
+}
