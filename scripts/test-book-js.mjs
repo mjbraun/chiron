@@ -111,6 +111,54 @@ if (scrolledTo !== 1000) {
   failed++;
   console.log(`FAIL setPosition: scrolled to ${scrolledTo}, wanted 1000`);
 }
-const total = cases.length + choiceCases.length + positionCases.length + 1 + restoreCases.length + 1;
+// A drag that strays off the text keeps the run it had. The page answers
+// nothing for a point under a bar or past its bottom edge (the point is
+// outside what the bars leave uncovered), and a lift there used to drop
+// the selection the reader was looking at.
+sandbox.window.innerWidth = 1024;
+sandbox.window.innerHeight = 1200;
+let selectionFailed = 0;
+const selectionFail = (msg) => { selectionFailed++; console.log(`FAIL selection: ${msg}`); };
+// A caret lookup that answers only inside the viewport, as WebKit's does.
+const caretInView = (x, y) => (y >= 0 && y < 1200 && x >= 0 && x < 1024) ? { x, y } : null;
+const above = sandbox.caretNear(300, -40, caretInView);
+if (!above || above.y !== 0) selectionFail(`a point under the top bar is read at the edge, got ${JSON.stringify(above)}`);
+const below = sandbox.caretNear(300, 1260, caretInView);
+if (!below || below.y !== 1199) selectionFail(`a point past the bottom is read at the edge, got ${JSON.stringify(below)}`);
+const inside = sandbox.caretNear(300, 500, caretInView);
+if (!inside || inside.y !== 500 || inside.x !== 300) selectionFail(`a point on the page is read where it is, got ${JSON.stringify(inside)}`);
+if (sandbox.caretNear(300, 500, () => null) !== null) selectionFail("a point with no text anywhere near it is still a miss");
+// The caret lookup answers nothing for a point in a band 24px below the
+// edge too (the page's own idea of its edge differs from the view's): the
+// lookup steps inward until it finds text.
+const caretBelowBand = (x, y) => (y >= 24 && y < 1200) ? { x, y } : null;
+const banded = sandbox.caretNear(300, -10, caretBelowBand);
+if (!banded || banded.y < 24 || banded.y > 60) selectionFail(`a point in a dead band at the edge steps inward, got ${JSON.stringify(banded)}`);
+
+// The provisional highlight stays while a drag strays, and the lift takes
+// what was shown when its own point misses.
+const run = { start: 10, end: 20, text: "ten letters" };
+let answer = run;
+sandbox.offsetsFromPoints = () => answer;
+let marked = null, unmarked = 0;
+sandbox.markRange = (start, end, kind, id) => { marked = { start, end, kind, id }; };
+sandbox.unmark = () => { unmarked++; };
+if (sandbox.previewRange(0, 0, 1, 1) !== run) selectionFail("a drag over text previews the run");
+if (!marked || marked.id !== "preview" || marked.start !== 10) selectionFail("the preview is marked on the page");
+answer = null;
+marked = null;
+if (sandbox.previewRange(0, 0, 1, -50) !== run) selectionFail("a drag that strays keeps the run it had");
+if (marked !== null) selectionFail("a stray point marks nothing new");
+const ended = sandbox.endSelection(0, 0, 1, -50);
+if (ended !== run) selectionFail(`a lift off the text takes the run shown, got ${JSON.stringify(ended)}`);
+if (unmarked === 0) selectionFail("the preview comes off at the lift");
+if (sandbox.endSelection(0, 0, 1, -50) !== null) selectionFail("the run shown is taken once; a second lift with nothing shown is nothing");
+const other = { start: 30, end: 40, text: "other text" };
+answer = other;
+if (sandbox.endSelection(0, 0, 1, 1) !== other) selectionFail("a lift on text takes the run under it");
+const selectionCases = 13;
+
+const total = cases.length + choiceCases.length + positionCases.length + 1 + restoreCases.length + 1 + selectionCases;
+failed += selectionFailed;
 console.log(`${total - failed}/${total} book.js cases pass`);
 process.exit(failed ? 1 : 0);

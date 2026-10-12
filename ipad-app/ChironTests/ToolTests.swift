@@ -1,4 +1,5 @@
 import XCTest
+import UIKit
 @testable import Chiron
 
 /// The tools as the Pencil's gestures drive them.
@@ -43,6 +44,24 @@ final class ToolTests: XCTestCase {
         s.switchPrevious(); XCTAssertEqual(s.tool, .highlighter)
         s.tool = .none
         s.switchPrevious(); XCTAssertEqual(s.tool, .highlighter, "putting a tool down and switching back picks it up again")
+    }
+
+    /// A selecting tool's drag is measured from the top of the page's
+    /// content, below the title bar, and a drag that reaches under the bar
+    /// or past the bottom lands on the page's edge rather than off it:
+    /// the page answers nothing for a point it does not show, and a
+    /// selection up to the first line under the bar was being dropped.
+    func testADragIsKeptOnThePageTheBarsLeaveUncovered() {
+        let inset = UIEdgeInsets(top: 74, left: 0, bottom: 20, right: 0)
+        let bounds = CGRect(x: 0, y: 0, width: 1024, height: 1366)
+        let middle = ReaderView.Coordinator.pagePoint(CGPoint(x: 300, y: 500), inset: inset, in: bounds)
+        XCTAssertEqual(middle, CGPoint(x: 300, y: 426), "a point on the page is measured from below the bar")
+        let underBar = ReaderView.Coordinator.pagePoint(CGPoint(x: 300, y: 40), inset: inset, in: bounds)
+        XCTAssertEqual(underBar, CGPoint(x: 300, y: 0), "a point under the title bar lands on the first line below it")
+        let pastBottom = ReaderView.Coordinator.pagePoint(CGPoint(x: 300, y: 1360), inset: inset, in: bounds)
+        XCTAssertEqual(pastBottom, CGPoint(x: 300, y: 1366 - 74 - 20 - 1), "a point past the bottom lands on the last line shown")
+        let offSide = ReaderView.Coordinator.pagePoint(CGPoint(x: -5, y: 500), inset: inset, in: bounds)
+        XCTAssertEqual(offSide.x, 0, "a point off the side lands on the edge")
     }
 
     /// Ink needs a Pencil: a phone's palette has no pen and no eraser; the

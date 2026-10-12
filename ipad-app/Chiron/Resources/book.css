@@ -121,6 +121,12 @@ th, td { border: 1px solid var(--separator); padding: 0.4em 0.8em; }
 .beat.done { opacity: 0.92; }
 
 /* ------- marks: highlights and questions ------- */
+/* While a tool's drag is the selection (body.selecting, set by the native
+ * side), the page's own text selection is off: a press held a moment
+ * before the drag would otherwise start WebKit's, with its handles, and
+ * the tool would never see the drag. A beat's field keeps its own. */
+body.selecting #chapter { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+body.selecting #chapter input, body.selecting #chapter textarea { -webkit-user-select: text; user-select: text; }
 mark.mark { color: inherit; border-radius: 2px; padding: 0.05em 0; }
 mark.mark-highlight { background: rgba(255, 214, 10, 0.45); }
 mark.mark-question { background: rgba(10, 132, 255, 0.18); box-shadow: 0 2px 0 rgba(10, 132, 255, 0.55); }

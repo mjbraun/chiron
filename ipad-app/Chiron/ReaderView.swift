@@ -322,6 +322,15 @@ struct ReaderView: UIViewRepresentable {
                 selector.isEnabled = false
                 web?.scrollView.isScrollEnabled = true
             }
+            applySelecting()
+        }
+
+        /// The page is told whether a tool's drag is the selection, so its
+        /// own text selection keeps out of the drag's way; told again when
+        /// the page is reloaded, since the page starts over.
+        private func applySelecting() {
+            guard pageReady else { return }
+            web?.evaluateJavaScript("setSelecting(\(selector.isEnabled))")
         }
 
         // MARK: a finger on the canvas
@@ -397,14 +406,29 @@ struct ReaderView: UIViewRepresentable {
             return CGPoint(x: inset.left, y: inset.top)
         }
 
+        /// Where a touch on the view falls on the page, kept within the
+        /// part of the page the bars leave uncovered. The page answers
+        /// nothing for a point under a bar or past the bottom edge, and a
+        /// drag ends there whenever the reader selects up to the first
+        /// line under the title bar: that is a selection all the same.
+        static func pagePoint(_ location: CGPoint, inset: UIEdgeInsets, in bounds: CGRect) -> CGPoint {
+            let width = max(bounds.width - inset.left - inset.right - 1, 0)
+            let height = max(bounds.height - inset.top - inset.bottom - 1, 0)
+            return CGPoint(x: min(max(location.x - inset.left, 0), width),
+                           y: min(max(location.y - inset.top, 0), height))
+        }
+
         @objc private func selectPan(_ g: UIPanGestureRecognizer) {
             guard let web else { return }
-            let o = pageOrigin
-            let p = CGPoint(x: g.location(in: web).x - o.x, y: g.location(in: web).y - o.y)
+            let p = Self.pagePoint(g.location(in: web), inset: web.scrollView.adjustedContentInset, in: web.bounds)
             switch g.state {
             case .began: selectionStart = p
             case .changed: preview(from: selectionStart, to: p)
-            case .ended: select(from: selectionStart, to: p)
+            // A drag the system cuts short (a second touch, a gesture of
+            // its own) ends like any other: the reader saw the run
+            // highlighted, and a highlight left on the page with no card
+            // is the one thing that must not happen.
+            case .ended, .cancelled: select(from: selectionStart, to: p)
             default: break
             }
         }
@@ -414,7 +438,7 @@ struct ReaderView: UIViewRepresentable {
         }
 
         private func select(from a: CGPoint, to b: CGPoint) {
-            web?.evaluateJavaScript("unmark('preview'); offsetsFromPoints(\(a.x), \(a.y), \(b.x), \(b.y))") { [weak self] result, _ in
+            web?.evaluateJavaScript("endSelection(\(a.x), \(a.y), \(b.x), \(b.y))") { [weak self] result, _ in
                 guard let self, let r = result as? [String: Any],
                       let start = r["start"] as? Int, let end = r["end"] as? Int, let text = r["text"] as? String else { return }
                 Task { @MainActor in
@@ -492,6 +516,7 @@ struct ReaderView: UIViewRepresentable {
                     web?.evaluateJavaScript("setScale(\(scale)); setAssetBase('\(base)'); initChapter(\(json), \(position))") { [weak self] _, _ in
                         guard let self else { return }
                         self.pageReady = true
+                        self.applySelecting()
                         Task { @MainActor in self.apply(marks: self.session.marks) }
                     }
                 }

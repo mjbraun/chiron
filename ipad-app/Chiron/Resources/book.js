@@ -211,12 +211,31 @@ function offsetOf(node, off, nodes) {
   return -1;
 }
 
+/* The caret at a point, or at the nearest point inward that has one. The
+ * page answers nothing for a point outside the part of it the bars leave
+ * uncovered, and a drag reaches there whenever the reader selects up to
+ * the first line under the title bar or down past the last; its edge is
+ * not quite where the native side thinks either, so from a miss the
+ * lookup steps toward the middle of the page until something answers. */
+function caretNear(x, y, caret = (px, py) => document.caretRangeFromPoint(px, py)) {
+  const w = window.innerWidth, h = window.innerHeight;
+  const cx = Math.min(Math.max(x, 0), w - 1);
+  let cy = Math.min(Math.max(y, 0), h - 1);
+  const step = cy < h / 2 ? 12 : -12;
+  for (let i = 0; i < 8; i++, cy += step) {
+    if (cy < 0 || cy >= h) break;
+    const r = caret(cx, cy);
+    if (r) return r;
+  }
+  return null;
+}
+
 /* Offsets for a drag from (x1,y1) to (x2,y2) in viewport coordinates,
  * snapped outward to word boundaries. Null when the points miss the text. */
 function offsetsFromPoints(x1, y1, x2, y2) {
   const nodes = markableTextNodes();
-  const a = document.caretRangeFromPoint(x1, y1);
-  const b = document.caretRangeFromPoint(x2, y2);
+  const a = caretNear(x1, y1);
+  const b = caretNear(x2, y2);
   if (!a || !b) return null;
   let s = offsetOf(a.startContainer, a.startOffset, nodes);
   let e = offsetOf(b.startContainer, b.startOffset, nodes);
@@ -280,12 +299,33 @@ function applyMarks(list) {
   for (const m of list) markRange(m.start, m.end, m.kind, m.id);
 }
 
-/* A provisional highlight while the drag is in progress. */
+/* A provisional highlight while the drag is in progress. A drag that
+ * strays off the text (over a picture, under a bar) keeps the run it had
+ * rather than losing it, as a selection anywhere else would. */
+let preview = null;
 function previewRange(x1, y1, x2, y2) {
   const r = offsetsFromPoints(x1, y1, x2, y2);
-  unmark("preview");
-  if (r) markRange(r.start, r.end, "preview", "preview");
+  if (!r) return preview;
+  preview = r;
+  markRange(r.start, r.end, "preview", "preview");
   return r;
+}
+
+/* The drag has ended: the run under its points, or, when the lift missed
+ * the text, the run the reader was looking at. What was shown highlighted
+ * is what they selected. */
+function endSelection(x1, y1, x2, y2) {
+  const shown = preview;
+  preview = null;
+  unmark("preview");
+  return offsetsFromPoints(x1, y1, x2, y2) || shown;
+}
+
+/* While a tool's drag is the selection, the page's own selection stays
+ * out of the way: a press held a moment before the drag would otherwise
+ * start WebKit's, with its handles, and take the drag from the tool. */
+function setSelecting(on) {
+  document.body.classList.toggle("selecting", !!on);
 }
 
 document.addEventListener("click", (e) => {

@@ -11,6 +11,21 @@ symptom, the cause, what to do. Add to it in the same commit as the fix.
   `.buttonStyle(.glass)` on each button inside a `GlassEffectContainer`,
   and material (`.regularMaterial`) for a surface that carries text and
   buttons. The palette UI test is the proof either way.
+- **A selection's lift under the title bar selected nothing (2026-10-12).**
+  The Question tool's drag previewed a run and then opened no card. The
+  page is asked for the run under the drag's two points, and WebKit's
+  `caretRangeFromPoint` answers null for any point outside the part of
+  the page the bars leave uncovered: a drag up to the first line under
+  the bar, or down past the bottom edge, ended there and the lift got
+  nothing, with the preview left on the page. (A press held a moment
+  before the drag has a second way to the same symptom: WebKit's own
+  long-press selection takes the drag.) The native side now keeps the
+  drag's points on the shown page, the page steps inward from a miss,
+  the preview survives a stray point and the lift takes the run shown,
+  a cancelled drag ends like a finished one, and the page's own
+  selection is off while a tool's drag is the selection. Not reproduced
+  on the device from here: the tests cover the mapping and the page's
+  fallbacks.
 - **An SF Symbol name that does not exist renders as text (2026-09-04).**
   A `Label` in a toolbar showed its title instead of the symbol:
   `doc.text.badge.plus` is not a symbol. Check a name with
