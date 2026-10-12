@@ -192,9 +192,11 @@ func (c *Corpus) loadUnit(spec UnitSpec) (*Unit, error) {
 			return nil, fmt.Errorf("questions.yaml: %w", err)
 		}
 		for i := range u.Questions.Pretest {
+			u.Questions.Pretest[i].deriveKind()
 			u.Questions.Pretest[i].shuffleOptions()
 		}
 		for i := range u.Questions.Check {
+			u.Questions.Check[i].deriveKind()
 			u.Questions.Check[i].shuffleOptions()
 		}
 	}

@@ -75,7 +75,7 @@ var errStaleChapter = errors.New("stored chapter was built from an earlier quest
 // bankHash fingerprints what a chapter bakes in: the unit's question bank
 // and its beats.
 func bankHash(u *corpus.Unit) string {
-	data, err := yaml.Marshal(map[string]any{"questions": u.Questions, "beats": u.Beats()})
+	data, err := yaml.Marshal(map[string]any{"questions": u.Questions.Authored(), "beats": u.Beats()})
 	if err != nil {
 		return ""
 	}

@@ -401,6 +401,22 @@ symptom, the cause, what to do. Add to it in the same commit as the fix.
   role that writes for the reader to use the title (2026-10-12, Matt
   could not tell what u1 or u12 stood for).
 
+- **A pretest item with options but no `kind` reached the iPad as a prose
+  box with no answer behind it (2026-10-12).** The spec's pretest schema
+  has no `kind` line (the check items' does), and the taps rewriter
+  writes pretest choices that way, so eight items of the Agent Auth book
+  (u3, u5, u8, u9) had `check: choice` and four options and loaded with
+  Kind empty. Everything downstream tests `Kind == "mcq"`: the baked
+  chapter item became `constructed` with no options and an empty reveal,
+  the app showed a text field, and the commit revealed nothing. Matt
+  asked where the answer was. The loader now derives the kind from the
+  shape (`deriveKind`, next to the option shuffle) and marks it
+  `KindImplied`; `bankHash` fingerprints the bank as authored
+  (`Questions.Authored()`), so the stored chapters kept their hashes and
+  nothing was re-authored. A derived field must stay out of the
+  fingerprint, or fixing the loader drops every chapter it touches. The
+  sign in a stored chapter: a pretest item with `"kind": "constructed"`,
+  `"check": "choice"` and `"reveal": {}`.
 - **A new Swift file needs `xcodegen generate` before it builds
   (2026-09-06).** `Chiron.xcodeproj` is generated from `project.yml`; a
   file added on disk is not in the project until then, and the error

@@ -81,15 +81,20 @@ type RevealOption struct {
 
 // Question is a pretest or check item.
 type Question struct {
-	ID         string `yaml:"id" json:"id"`
-	Unit       string `yaml:"unit" json:"unit,omitempty"`
-	Concept    string `yaml:"concept" json:"concept,omitempty"`
-	Kind       string `yaml:"kind" json:"kind"` // constructed | mcq
-	Prompt     string `yaml:"prompt" json:"prompt"`
-	Check      string `yaml:"check" json:"check"`
-	Answer     Scalar `yaml:"answer" json:"-"`
-	Rubric     string `yaml:"rubric" json:"-"`
-	Difficulty string `yaml:"difficulty" json:"difficulty,omitempty"`
+	ID      string `yaml:"id" json:"id"`
+	Unit    string `yaml:"unit" json:"unit,omitempty"`
+	Concept string `yaml:"concept" json:"concept,omitempty"`
+	Kind    string `yaml:"kind" json:"kind"` // constructed | mcq
+	// KindImplied says the loader derived Kind from the item's shape (a
+	// pretest item has no kind in the schema; its options and `check:
+	// choice` make it a choice). A derived kind is not part of the bank
+	// as authored, so a chapter's fingerprint leaves it out.
+	KindImplied bool   `yaml:"-" json:"-"`
+	Prompt      string `yaml:"prompt" json:"prompt"`
+	Check       string `yaml:"check" json:"check"`
+	Answer      Scalar `yaml:"answer" json:"-"`
+	Rubric      string `yaml:"rubric" json:"-"`
+	Difficulty  string `yaml:"difficulty" json:"difficulty,omitempty"`
 	// Band places a calibration item on the screener's own 1-5 scale, so a
 	// level's series can be a window around the level rather than a ladder
 	// that only ever trims from the top.
