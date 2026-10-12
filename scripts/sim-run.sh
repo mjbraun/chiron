@@ -38,9 +38,9 @@ SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
 APPDIR="$SCRIPTS/../ipad-app"
 SERVER="${CHIRON_SERVER:-http://localhost:8082}"
 
-# The Xcode project is generated, not kept in the repo: the team id
-# comes from the environment at generate time.
-[ -d "$APPDIR/Chiron.xcodeproj" ] || (cd "$APPDIR" && xcodegen generate)
+# The Xcode project is generated, not kept in the repo; a stale one
+# leaves new files out of the bundle, so it is remade when a source is newer.
+"$SCRIPTS/gen-project.sh"
 
 UDID=$(xcrun simctl list devices | grep -E "^\s+$DEVICE \(" | head -1 | sed -E 's/.*\(([0-9A-F-]{36})\).*/\1/')
 if [ -z "$UDID" ]; then

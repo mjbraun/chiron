@@ -66,6 +66,16 @@ symptom, the cause, what to do. Add to it in the same commit as the fix.
 - **New test files need `xcodegen generate` (2026-09-04).** The project
   is generated; a new file is not in it until then, and the count of
   passed tests stays where it was.
+- **A new resource file is the worst case of the stale project
+  (2026-10-12).** `math.js` arrived from the sprite, the old project
+  built fine without it, and two ink tests failed with "textarea, input
+  is on the page: found 0": the page errored before any beat rendered,
+  and the Simulator shows nothing of that. `sim-run.sh` and `mac-run.sh`
+  now go through `scripts/gen-project.sh`, which regenerates whenever
+  project.yml or a source is newer than the project and keeps the team
+  id from the project when the environment sets none. Pulled a commit
+  that adds a file under `ipad-app/` and a test fails oddly? Check the
+  bundle before the code.
 - **Date fixtures depend on the timezone (2026-09-03).** Use noon UTC.
 - **`NWListener` needs its handler before `start` (2026-09-02).** Otherwise
   EINVAL; and `.any` port, `acceptLocalOnly` and the loopback interface

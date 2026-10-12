@@ -16,9 +16,9 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT/ipad-app"
-# The Xcode project is generated, not kept in the repo: the team id
-# comes from the environment at generate time.
-[ -d Chiron.xcodeproj ] || xcodegen generate
+# The Xcode project is generated, not kept in the repo; a stale one
+# leaves new files out of the bundle, so it is remade when a source is newer.
+"$ROOT/scripts/gen-project.sh"
 
 DEST='platform=macOS,variant=Mac Catalyst'
 APP="$PWD/build-mac/Build/Products/Debug-maccatalyst/Chiron.app"
