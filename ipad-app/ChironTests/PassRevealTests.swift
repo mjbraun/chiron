@@ -11,6 +11,14 @@ final class PassRevealTests: XCTestCase {
         XCTAssertEqual(PassReveal.headline(correct: nil), "You passed on this one.")
     }
 
+    /// A wrong pick reveals the right option too. Its explanation opens
+    /// "Correct." for whoever tapped it, which under a red X on the
+    /// reader's own pick reads as if they had been right.
+    func testAMissedAnswerIsNamedNotAffirmed() {
+        XCTAssertEqual(PassReveal.missedHeadline(correct: 0), "The answer is A.")
+        XCTAssertEqual(PassReveal.missedHeadline(correct: nil), "")
+    }
+
     func testAnAffirmationForTheChooserIsDropped() {
         XCTAssertEqual(PassReveal.explanation("Right; the client holds no secret, so it proves possession instead."),
                        "The client holds no secret, so it proves possession instead.")

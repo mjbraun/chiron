@@ -126,10 +126,24 @@ struct ItemFlowView: View {
                                         .foregroundStyle(.secondary)
                                         .padding(.leading, 30)
                                     }
-                                } else if selected == i || r.correct {
+                                } else if selected == i {
                                     MathText(text: r.explain, size: 15)
                                         .foregroundStyle(r.correct ? .green : .orange)
                                         .padding(.leading, 30)
+                                } else if r.correct {
+                                    // The reader picked something else, so
+                                    // the right option's "Correct. ..." is
+                                    // not addressed to them.
+                                    let why = PassReveal.explanation(r.explain)
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(PassReveal.missedHeadline(correct: i))
+                                            .font(.callout.weight(.semibold))
+                                        if !why.isEmpty {
+                                            MathText(text: why, size: 15)
+                                        }
+                                    }
+                                    .foregroundStyle(.green)
+                                    .padding(.leading, 30)
                                 }
                             }
                         }

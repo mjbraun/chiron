@@ -1,16 +1,23 @@
 import Foundation
 
-/// What a choice item shows after "I don't know". The answer is still
-/// revealed - the reader asked to move on, not to be kept in the dark - but
-/// named as the answer to a question they passed on, not as their pick. An
-/// option's `explain` is authored for the person who tapped it, so the
-/// affirmation it opens with ("Right; ...") comes off before it is shown.
+/// What a choice item shows for the right option when the reader did not
+/// pick it: after "I don't know", or after a wrong pick. The answer is
+/// still revealed - the reader asked to move on, not to be kept in the
+/// dark - but named as the answer, not as their pick. An option's
+/// `explain` is authored for the person who tapped it, so the affirmation
+/// it opens with ("Right; ...", "Correct.") comes off before it is shown.
 enum PassReveal {
     static func headline(correct: Int?) -> String {
         guard let i = correct, let letter = UnicodeScalar(65 + i) else {
             return "You passed on this one."
         }
         return "You passed on this one. The answer is \(Character(letter))."
+    }
+
+    /// Over the right option after a wrong pick: "The answer is A."
+    static func missedHeadline(correct: Int?) -> String {
+        guard let i = correct, let letter = UnicodeScalar(65 + i) else { return "" }
+        return "The answer is \(Character(letter))."
     }
 
     /// An opening word that agrees with the chooser, and the punctuation
