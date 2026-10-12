@@ -38,12 +38,17 @@ body {
   max-width: 36em;
   margin: 0 auto;
   padding: 1.6em 1.4em 8em;
+  /* A URL or a long word breaks rather than running off the right edge
+   * (pre keeps its lines and scrolls). */
+  overflow-wrap: anywhere;
 }
-/* The iPad on its side has the width to spare: the column reflows to
- * about 950pt at the default size, still clear of the tool rail. */
+/* The iPad on its side keeps the margins it has upright, and the column
+ * takes the rest. The page fills the screen, so the height here is the
+ * width upright: the margin there is (height - column) / 2 each side,
+ * and the column is 36em plus 1.4em of padding each side. */
 @media (orientation: landscape) {
   #chapter {
-    max-width: 50em;
+    max-width: calc(100vw - 100vh + 36em);
   }
 }
 h1 { font-size: 1.9em; line-height: 1.2; margin: 0 0 0.3em; }

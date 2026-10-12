@@ -222,23 +222,48 @@ if (once !== "about $33K MRR (Nous at $74.8K MRR) and [I:x^2] then $a$[D:E=mc^2]
 if (textOf(page) !== once) renderFail(`setting a page twice changes it: ${JSON.stringify(textOf(page))}`);
 if (para.childNodes.length !== 4 || para.childNodes[1].className !== "katex") renderFail("the span is set in place of its text");
 
-// The column reads at a book's measure held upright, and reflows to more
-// of the screen when the iPad is turned on its side.
+// The column reads at a book's measure held upright. On its side the
+// iPad keeps the same margins it had upright, so the column takes the
+// rest; the web view fills the screen, so landscape's height is
+// upright's width. Checked on the 13-inch iPad at the default size.
 const css = readFileSync(join(res, "book.css"), "utf8");
-const measureOf = (block) => {
-  const m = /#chapter\s*{[^}]*max-width:\s*([\d.]+)em/.exec(block);
-  return m ? parseFloat(m[1]) : null;
+const chapterRule = (block) => {
+  const m = /#chapter\s*{([^}]*)/.exec(block);
+  return m ? m[1] : "";
+};
+// A width in CSS, with em, vw and vh, evaluated for one screen.
+const widthOf = (rule, em, vw, vh) => {
+  const m = /max-width:\s*([^;]+);/.exec(rule);
+  if (!m) return null;
+  const expr = m[1].replace(/calc/g, "").replace(/([\d.]+)em/g, "($1*em)")
+    .replace(/([\d.]+)vw/g, "($1*vw/100)").replace(/([\d.]+)vh/g, "($1*vh/100)");
+  return new Function("em", "vw", "vh", `return ${expr};`)(em, vw, vh);
+};
+const sideOf = (rule, em) => {
+  const m = /padding:\s*[\d.]+em\s+([\d.]+)em/.exec(rule);
+  return m ? parseFloat(m[1]) * em : 0;
 };
 const landscape = /@media[^{]*orientation:\s*landscape[^{]*{([\s\S]*?)}\s*}/.exec(css);
-const upright = measureOf(css.replace(/@media[\s\S]*?}\s*}/g, ""));
-const sideways = landscape ? measureOf(landscape[1]) : null;
+const uprightRule = chapterRule(css.replace(/@media[\s\S]*?}\s*}/g, ""));
+const sidewaysRule = landscape ? chapterRule(landscape[1]) : "";
+const em = 19, short = 1024, long = 1366;
+const upright = widthOf(uprightRule, em, short, long);
+const sideways = widthOf(sidewaysRule, em, long, short);
 let layoutFailed = 0;
 const layoutFail = (msg) => { layoutFailed++; console.log(`FAIL layout ${msg}`); };
-if (upright === null) layoutFail("the chapter has no measure in em");
+if (upright === null) layoutFail("the chapter has no measure");
 if (sideways === null) layoutFail("landscape has no measure of its own");
-else if (upright !== null && sideways <= upright) layoutFail(`landscape's measure ${sideways}em is no wider than upright's ${upright}em`);
+else if (upright !== null) {
+  const margin = (w, measure) => (w - Math.min(w, measure + 2 * sideOf(uprightRule, em))) / 2;
+  const up = margin(short, upright), side = margin(long, sideways);
+  if (Math.abs(up - side) > 0.5) layoutFail(`landscape's margin is ${side.toFixed(1)}pt, upright's ${up.toFixed(1)}pt`);
+  if (sideways <= upright) layoutFail(`landscape's measure ${sideways}pt is no wider than upright's ${upright}pt`);
+}
+// A URL or a long word in the text breaks rather than running off the
+// right edge; pre scrolls instead (its white-space does not wrap).
+if (!/#chapter\s*{[^}]*overflow-wrap:\s*anywhere/.test(uprightRule ? css : "")) layoutFail("the chapter does not break long words");
 
-const total = cases.length + choiceCases.length + positionCases.length + 1 + restoreCases.length + 1 + selectionCases + mathCases.length + 3 + 1;
+const total = cases.length + choiceCases.length + positionCases.length + 1 + restoreCases.length + 1 + selectionCases + mathCases.length + 3 + 2;
 failed += selectionFailed + mathFailed + renderFailed + layoutFailed;
 console.log(`${total - failed}/${total} book.js cases pass`);
 process.exit(failed ? 1 : 0);
