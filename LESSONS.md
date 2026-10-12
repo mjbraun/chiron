@@ -383,7 +383,13 @@ symptom, the cause, what to do. Add to it in the same commit as the fix.
   app takes the server's copy over its cache whenever the HTML differs,
   so the next open shows it; no restart, since `loadChapter` reads the
   file each time. The canon edit reaches a re-authoring only after the
-  next server start, because units are read at boot.
+  next server start, because units are read at boot. Look at the stored
+  section before replacing it: the author role may have condensed the
+  canon ("the recap stays short"), and the stored text is then not the
+  canon at all. For an addition, render only the new passage and splice
+  it at the same anchor in both files (a `<!-- fade -->` comment or the
+  paragraph it replaces survive rendering verbatim), so the author's
+  wording around it stays (2026-10-12, the PKCE and nonce runs).
 
 - **A new Swift file needs `xcodegen generate` before it builds
   (2026-09-06).** `Chiron.xcodeproj` is generated from `project.yml`; a
