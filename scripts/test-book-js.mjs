@@ -222,7 +222,23 @@ if (once !== "about $33K MRR (Nous at $74.8K MRR) and [I:x^2] then $a$[D:E=mc^2]
 if (textOf(page) !== once) renderFail(`setting a page twice changes it: ${JSON.stringify(textOf(page))}`);
 if (para.childNodes.length !== 4 || para.childNodes[1].className !== "katex") renderFail("the span is set in place of its text");
 
-const total = cases.length + choiceCases.length + positionCases.length + 1 + restoreCases.length + 1 + selectionCases + mathCases.length + 3;
-failed += selectionFailed + mathFailed + renderFailed;
+// The column reads at a book's measure held upright, and reflows to more
+// of the screen when the iPad is turned on its side.
+const css = readFileSync(join(res, "book.css"), "utf8");
+const measureOf = (block) => {
+  const m = /#chapter\s*{[^}]*max-width:\s*([\d.]+)em/.exec(block);
+  return m ? parseFloat(m[1]) : null;
+};
+const landscape = /@media[^{]*orientation:\s*landscape[^{]*{([\s\S]*?)}\s*}/.exec(css);
+const upright = measureOf(css.replace(/@media[\s\S]*?}\s*}/g, ""));
+const sideways = landscape ? measureOf(landscape[1]) : null;
+let layoutFailed = 0;
+const layoutFail = (msg) => { layoutFailed++; console.log(`FAIL layout ${msg}`); };
+if (upright === null) layoutFail("the chapter has no measure in em");
+if (sideways === null) layoutFail("landscape has no measure of its own");
+else if (upright !== null && sideways <= upright) layoutFail(`landscape's measure ${sideways}em is no wider than upright's ${upright}em`);
+
+const total = cases.length + choiceCases.length + positionCases.length + 1 + restoreCases.length + 1 + selectionCases + mathCases.length + 3 + 1;
+failed += selectionFailed + mathFailed + renderFailed + layoutFailed;
 console.log(`${total - failed}/${total} book.js cases pass`);
 process.exit(failed ? 1 : 0);

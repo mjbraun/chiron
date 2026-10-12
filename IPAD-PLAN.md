@@ -25,7 +25,7 @@ lines in eleven files:
 | `Servers.swift`, `Credentials.swift` | saved servers list, Keychain-held shared key |
 | `SelfTest.swift` | launch-argument harness: `selftest`, `selftestweak`, `showreader|showcheck|showpretest|showbreak [unit]`, `showteach [demo]`, `server=URL` |
 | `TeachView.swift` | "Teach me" conversation (v2 feature; untouched by this plan) |
-| `Resources/` | `chapter.html`, `book.css` (paper + dark themes, 19px serif, 44em column), `book.js` (chapter render, beats, mechanical grading mirror of `checkers`), `katex/` (folder reference - must stay a folder or math dies), `default-book.json` (bundled offline book) |
+| `Resources/` | `chapter.html`, `book.css` (paper + dark themes, 19px serif, 36em column, 50em in landscape), `book.js` (chapter render, beats, mechanical grading mirror of `checkers`), `katex/` (folder reference - must stay a folder or math dies), `default-book.json` (bundled offline book) |
 
 **It builds today** on Xcode 26.6 for the iOS 26.5 simulator (`chiron-ipad`,
 device type iPad (A16)). `scripts/sim-run.sh` builds, installs, launches with

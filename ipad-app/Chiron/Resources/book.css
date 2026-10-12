@@ -39,6 +39,13 @@ body {
   margin: 0 auto;
   padding: 1.6em 1.4em 8em;
 }
+/* The iPad on its side has the width to spare: the column reflows to
+ * about 950pt at the default size, still clear of the tool rail. */
+@media (orientation: landscape) {
+  #chapter {
+    max-width: 50em;
+  }
+}
 h1 { font-size: 1.9em; line-height: 1.2; margin: 0 0 0.3em; }
 h2 { font-size: 1.35em; margin-top: 2.2em; border-bottom: 1px solid var(--separator); padding-bottom: 0.25em; }
 .chapter-meta { color: var(--ink-secondary); font-size: 0.85em; margin-bottom: 2.5em; }
