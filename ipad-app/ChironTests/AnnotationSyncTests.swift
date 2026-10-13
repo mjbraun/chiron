@@ -222,7 +222,8 @@ final class AnnotationSyncTests: XCTestCase {
         openChapter(s)
         try await settle()
         XCTAssertEqual(s.marks.map(\.id), ["phone"], "nothing here yet: the server's copy is taken")
-        s.addMark(kind: .highlight, start: 0, end: 7, text: "predict")
+        // A second run: the same run marked the same way is the phone's mark.
+        s.addMark(kind: .highlight, start: 8, end: 11, text: "the")
         fake.onAnnotations = { _, _ in var v = phone; v.version = 6; return v }
         fake.onPutAnnotations = { _, _, _, base in
             if base < 6 { var v = phone; v.version = 6; return .conflict(server: v) }
