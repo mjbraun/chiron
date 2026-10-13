@@ -131,6 +131,69 @@ func TestAServerChangeIsDeployed(t *testing.T) {
 	}
 }
 
+// Once main has the change, a deploy or build that does not finish is
+// not the request's failure: it is merged, its worktree gone, and the
+// next request that gets through that step carries it to ready.
+func TestAMergedChangeIsCarriedByTheNextBuild(t *testing.T) {
+	x := &fakeExec{answer: map[string]string{
+		"git log": "abc A thicker pen\n", "git diff": "ipad-app/Chiron/Palette.swift\n", "git rev-parse": "abc\n",
+		"!make app-build": "==> archive for iOS\n==> FAILED: archive\n",
+	}, stream: []string{`{"type":"result","result":"done"}`}}
+	a, store := agent(t, x)
+	first, _ := store.Create("the pen is too thin", nil, nil)
+	a.Once()
+	got, _ := store.Get(first.ID)
+	if got.Status != devreq.Merged || got.Pending != "app-build" || got.Commit != "abc" || !strings.Contains(got.Reason, "FAILED: archive") {
+		t.Fatalf("status %s pending %q commit %q reason %q", got.Status, got.Pending, got.Commit, got.Reason)
+	}
+	if !x.did("git -C /repo worktree remove") || !x.did("git -C /repo branch -D") {
+		t.Errorf("main has the change; nothing to keep: %v", x.calls)
+	}
+
+	// A server change is deployed and builds no app: the first still waits.
+	x = &fakeExec{answer: map[string]string{
+		"git log": "def Shorter detail\n", "git diff": "server-go/roles/capture.go\n", "git rev-parse": "def\n",
+	}, stream: []string{`{"type":"result","result":"done"}`}}
+	a.Exec = x
+	second, _ := store.Create("make detail shorter", nil, nil)
+	a.Once()
+	if got, _ = store.Get(first.ID); got.Status != devreq.Merged {
+		t.Errorf("a deploy does not build the app: %s", got.Status)
+	}
+	if got, _ = store.Get(second.ID); got.Status != devreq.Ready {
+		t.Errorf("second: %s %q", got.Status, got.Reason)
+	}
+
+	// The next app build carries it.
+	x = &fakeExec{answer: map[string]string{
+		"git log": "ghi A redder pen\n", "git diff": "ipad-app/Chiron/Palette.swift\n", "git rev-parse": "ghi\n",
+		"make app-build": "build 20260920-2 ready 2026.9.20 (311)\n",
+	}, stream: []string{`{"type":"result","result":"done"}`}}
+	a.Exec = x
+	writeBuild(t, a.Served, `{"version":"2026.9.20","build":311,"token":"`+strings.Repeat("ab", 32)+`","status":"ready"}`)
+	third, _ := store.Create("make the pen red", nil, nil)
+	a.Once()
+	got, _ = store.Get(first.ID)
+	if got.Status != devreq.Ready || got.Pending != "" || got.Build == nil || got.Build.Number != 311 {
+		t.Errorf("carried: %s pending %q build %+v", got.Status, got.Pending, got.Build)
+	}
+	if !strings.Contains(strings.Join(got.Log, "\n"), third.ID) {
+		t.Errorf("the log says which build carried it: %v", got.Log)
+	}
+
+	// A deploy that fails after the merge waits for the next deploy.
+	x = &fakeExec{answer: map[string]string{
+		"git log": "jkl Even shorter\n", "git diff": "server-go/roles/capture.go\n", "git rev-parse": "jkl\n",
+		"!make deploy": "cp: no space left\n",
+	}, stream: []string{`{"type":"result","result":"done"}`}}
+	a.Exec = x
+	fourth, _ := store.Create("shorter still", nil, nil)
+	a.Once()
+	if got, _ = store.Get(fourth.ID); got.Status != devreq.Merged || got.Pending != "deploy" || x.did("make app-build") {
+		t.Errorf("deploy failure: %s pending %q", got.Status, got.Pending)
+	}
+}
+
 // When the agent commits nothing, or the suite fails, the request fails
 // with the reason and the worktree is kept for a person.
 func TestFailuresAreSaidAndTheWorktreeKept(t *testing.T) {

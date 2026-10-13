@@ -54,6 +54,30 @@ final class RequestQuestionTests: XCTestCase {
         XCTAssertEqual(notices.sent.count, 1, "said once")
     }
 
+    /// A change in main whose build did not get through is merged, not
+    /// failed: out of the agent's hands, said once as such, with what it
+    /// waits on.
+    func testAMergedChangeIsNewsAndNotOpen() async throws {
+        let json = #"""
+        {"id":"req-1","text":"nicer","status":"merged","created_at":"2026-09-25T10:00:00Z","log":[],
+         "commit":"abc1234","pending":"app-build","reason":"the build failed:\n==> FAILED: archive"}
+        """#
+        let r = try JSONDecoder().decode(ChangeRequest.self, from: Data(json.utf8))
+        XCTAssertTrue(r.merged)
+        XCTAssertFalse(r.open, "nothing more happens to it until another build")
+        XCTAssertEqual(r.pending, "app-build")
+
+        let fake = FakeService()
+        fake.onChangeRequests = { [unowned self] in [self.request("building")] }
+        let library = library(fake)
+        let notices = try XCTUnwrap(library.notices as? FakeNotices)
+        await library.refreshRequests()
+        fake.onChangeRequests = { [r] in [r] }
+        await library.refreshRequests()
+        XCTAssertEqual(notices.sent.map(\.title), ["Your change is in; its build is pending"])
+        XCTAssertFalse(library.awaiting)
+    }
+
     func testAnAnswerGoesUpAndTheRequestIsWatchedAgain() async throws {
         let fake = FakeService()
         fake.onChangeRequests = { [unowned self] in [self.request("waiting", question: "Covers?")] }

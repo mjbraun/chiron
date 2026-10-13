@@ -1000,6 +1000,8 @@ struct ChangeRequest: Codable, Identifiable, Equatable {
     /// every question it asked before, with the answer it got.
     var question: String? = nil
     var thread: [Exchange]? = nil
+    /// What a merged change still waits on: "deploy" or "app-build".
+    var pending: String? = nil
 
     struct Build: Codable, Equatable {
         var version: String
@@ -1014,7 +1016,7 @@ struct ChangeRequest: Codable, Identifiable, Equatable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, text, status, log, last, summary, reason, commit, build, question, thread
+        case id, text, status, log, last, summary, reason, commit, build, question, thread, pending
         case createdAt = "created_at"
     }
 
@@ -1025,6 +1027,9 @@ struct ChangeRequest: Codable, Identifiable, Equatable {
     /// Stopped on a question for the reader.
     var waiting: Bool { status == "waiting" }
 
+    /// In main, with its deploy or build still to get through.
+    var merged: Bool { status == "merged" }
+
     /// Still in the agent's hands.
-    var open: Bool { status != "ready" && status != "failed" && !waiting }
+    var open: Bool { status != "ready" && status != "failed" && !merged && !waiting }
 }

@@ -225,15 +225,18 @@ final class Library: ObservableObject {
         }
         requests = list
         // A request that was in the agent's hands and is out of them now:
-        // done, failed, or stopped on a question for the reader.
+        // done, merged with its build pending, failed, or stopped on a
+        // question for the reader.
         for r in list where !r.open && openRequests.contains(r.id) {
+            let title: String
             if r.waiting {
-                notices.notify(id: "request-\(r.id)", title: "Chiron has a question", body: r.question ?? r.text)
+                title = "Chiron has a question"
+            } else if r.merged {
+                title = "Your change is in; its \(r.pending == "deploy" ? "deploy" : "build") is pending"
             } else {
-                notices.notify(id: "request-\(r.id)",
-                               title: r.status == "ready" ? "Your change is built" : "The change could not be made",
-                               body: r.text)
+                title = r.status == "ready" ? "Your change is built" : "The change could not be made"
             }
+            notices.notify(id: "request-\(r.id)", title: title, body: r.waiting ? r.question ?? r.text : r.text)
         }
         openRequests = Set(list.filter(\.open).map(\.id))
         watchRequests()

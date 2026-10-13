@@ -18,17 +18,26 @@ import (
 	"time"
 )
 
-// The states a request moves through, in order; failed can follow any.
-// Waiting is the agent stopped to ask Matt something; his answer queues
-// the request again.
+// The states a request moves through, in order; failed can follow any
+// up to the merge. Waiting is the agent stopped to ask Matt something;
+// his answer queues the request again. Merged is the change in main
+// with its deploy or app build not yet through: the next request that
+// gets through that step carries it to ready.
 const (
 	Queued   = "queued"
 	Waiting  = "waiting"
 	Working  = "working"
 	Testing  = "testing"
 	Building = "building"
+	Merged   = "merged"
 	Ready    = "ready"
 	Failed   = "failed"
+)
+
+// What a merged request still waits on.
+const (
+	PendingDeploy   = "deploy"
+	PendingAppBuild = "app-build"
 )
 
 type Request struct {
@@ -52,6 +61,9 @@ type Request struct {
 	Summary string   `json:"summary,omitempty"`
 	Reason  string   `json:"reason,omitempty"`
 	Commit  string   `json:"commit,omitempty"`
+	// Pending is the step a merged request still waits on: PendingDeploy
+	// or PendingAppBuild.
+	Pending string `json:"pending,omitempty"`
 	// Build is the app build the request produced, when the app changed.
 	Build *Build `json:"build,omitempty"`
 	// Question is what the agent is waiting on Matt for; Thread is every

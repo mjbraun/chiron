@@ -40,7 +40,10 @@ You are on the machine that serves the book. Facts that matter:
   `main`, `make deploy` if the server changed, `make app-build` if the
   app did. Matt's tap on "Request a change" is the permission for that
   deploy. A failed request keeps its worktree for a person; `git
-  worktree list` shows them. When Claude Code would be guessing it ends
+  worktree list` shows them. Once `main` has the change a deploy or app
+  build that fails leaves the request `merged` (with `pending`: `deploy`
+  or `app-build`), worktree gone; the next request that gets through
+  that step carries every merged one to `ready`. When Claude Code would be guessing it ends
   with `QUESTION: ...`; the request waits (status `waiting`, the
   wrench shows a badge), Matt answers in the requests card (`POST
   /dev/requests/{id}/answer`), and the request is queued again into the

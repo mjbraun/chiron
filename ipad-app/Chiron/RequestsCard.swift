@@ -144,8 +144,8 @@ struct RequestRow: View {
             if let summary = request.summary, !summary.isEmpty, !request.open, !request.waiting {
                 SelectableText(text: summary, font: Typography.uiSans(15), colour: .secondaryLabel)
             }
-            if let reason = request.reason, request.status == "failed" {
-                Text(reason).font(.footnote.monospaced()).foregroundStyle(.red).lineLimit(6)
+            if let reason = request.reason, request.status == "failed" || request.merged {
+                Text(reason).font(.footnote.monospaced()).foregroundStyle(request.merged ? Color.secondary : Color.red).lineLimit(6)
             }
             HStack {
                 if let c = request.commit { Text("commit \(c)").font(.footnote.monospaced()).foregroundStyle(.secondary) }
@@ -217,6 +217,7 @@ struct StatusPill: View {
         switch status {
         case "ready": return .green
         case "failed": return .red
+        case "merged": return .teal
         case "queued", ChangeRequest.keptHere: return .secondary
         case "waiting": return .orange
         default: return .blue

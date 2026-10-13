@@ -146,30 +146,65 @@ func (a *Agent) handle(r *devreq.Request) {
 	r.Commit = strings.TrimSpace(head)
 	say("main is now %s", r.Commit)
 
+	// Main has the change; the worktree has done its work.
+	a.Exec.Run(a.Repo, "git", "-C", a.Repo, "worktree", "remove", "--force", wt)
+	a.Exec.Run(a.Repo, "git", "-C", a.Repo, "branch", "-D", branch)
+
+	// From here a step that does not finish is not the change's failure:
+	// the request is merged, waiting on that step, and the next request
+	// that gets through it carries this one along.
+	merged := func(pending, reason string) {
+		r.Status = devreq.Merged
+		r.Pending = pending
+		r.Reason = reason
+		say("merged; the %s is pending: %s", pending, firstLine(reason))
+	}
 	r.Status = devreq.Building
 	if touches(changed, "server-go/", "corpus/", "corpus-v2/") {
 		say("deploying the server")
 		if out, err := a.Exec.Run(a.Repo, "make", "deploy"); err != nil {
-			fail("deploy failed:\n" + tail(out, 30))
+			merged(devreq.PendingDeploy, "deploy failed:\n"+tail(out, 30))
 			return
 		}
+		a.carry(devreq.PendingDeploy, r.ID, nil)
 	}
 	if touches(changed, "ipad-app/", "scripts/mac-build.sh") {
 		say("building the app on the MacBook")
 		if out, err := a.Exec.Run(a.Repo, "make", "app-build"); err != nil {
-			fail("the build failed:\n" + tail(out, 30))
+			merged(devreq.PendingAppBuild, "the build failed:\n"+tail(out, 30))
 			return
 		}
 		if b, err := a.latestBuild(); err == nil {
 			r.Build = b
 			say("built %s (%d)", b.Version, b.Number)
 		}
+		a.carry(devreq.PendingAppBuild, r.ID, r.Build)
 	}
 
-	a.Exec.Run(a.Repo, "git", "-C", a.Repo, "worktree", "remove", "--force", wt)
-	a.Exec.Run(a.Repo, "git", "-C", a.Repo, "branch", "-D", branch)
 	r.Status = devreq.Ready
 	say("ready")
+}
+
+// carry marks ready every merged request waiting on the step that just
+// got through for request by: main carried their changes into it.
+func (a *Agent) carry(pending, by string, b *devreq.Build) {
+	all, err := a.Store.List()
+	if err != nil {
+		return
+	}
+	for _, m := range all {
+		if m.Status != devreq.Merged || m.Pending != pending {
+			continue
+		}
+		m.Status = devreq.Ready
+		m.Pending = ""
+		m.Reason = ""
+		if b != nil {
+			m.Build = b
+		}
+		m.Say(fmt.Sprintf("carried by %s; ready", by))
+		a.Store.Save(m)
+	}
 }
 
 // prompt is the brief Claude Code works from: the request, where the
