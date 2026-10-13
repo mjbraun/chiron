@@ -64,6 +64,22 @@ final class ToolTests: XCTestCase {
         XCTAssertEqual(offSide.x, 0, "a point off the side lands on the edge")
     }
 
+    /// Text the reader has selected with the page's own handles is the
+    /// run a selecting tool works on when it is picked: the words are
+    /// chosen already, so the question tool opens on them with no second
+    /// drag. The ink tools have no use for a selection, and a blank one is
+    /// not a selection.
+    func testASelectingToolPickedWithASelectionUpTakesIt() {
+        XCTAssertTrue(ReaderView.Coordinator.takesSelection(.ask, selection: "the implicit flow"))
+        XCTAssertTrue(ReaderView.Coordinator.takesSelection(.highlighter, selection: "the implicit flow"))
+        XCTAssertTrue(ReaderView.Coordinator.takesSelection(.note, selection: "the implicit flow"))
+        XCTAssertTrue(ReaderView.Coordinator.takesSelection(.capture, selection: "the implicit flow"))
+        XCTAssertFalse(ReaderView.Coordinator.takesSelection(.pen, selection: "the implicit flow"), "the pen draws; a selection is not its business")
+        XCTAssertFalse(ReaderView.Coordinator.takesSelection(.eraser, selection: "the implicit flow"))
+        XCTAssertFalse(ReaderView.Coordinator.takesSelection(.none, selection: "the implicit flow"))
+        XCTAssertFalse(ReaderView.Coordinator.takesSelection(.ask, selection: " \n"), "a blank selection is nothing to ask about")
+    }
+
     /// Ink needs a Pencil: a phone's palette has no pen and no eraser; the
     /// iPad's keeps the pen first and the eraser last.
     func testAPhoneHasNoInkTools() {

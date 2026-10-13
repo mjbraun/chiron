@@ -291,7 +291,52 @@ if (posted.length !== 2) reportFail("a selection inside a field is the field's, 
 sandbox.document.activeElement = null;
 sandbox.window.webkit = undefined;
 
-const total = cases.length + choiceCases.length + positionCases.length + 1 + restoreCases.length + 1 + selectionCases + mathCases.length + 3 + 2 + 4;
-failed += selectionFailed + reportFailed + mathFailed + renderFailed + layoutFailed;
+// A selecting tool picked while the page's own selection is up takes
+// that selection as its run: the reader chose the words already, and a
+// second drag over them is not what anyone means. The run is measured
+// the way a drag's is, in the article's offsets, whatever nodes the
+// selection's ends sit in, and the selection goes with it.
+const runNodes = [];
+let at = 0;
+for (const text of ["The quick brown ", "fox jumps ", "over the dog."]) {
+  const node = { nodeType: 3, nodeValue: text };
+  runNodes.push({ node, start: at, end: at + text.length });
+  at += text.length;
+}
+sandbox.markableTextNodes = () => runNodes;
+const block = { nodeType: 1, childNodes: runNodes.map((t) => t.node) };
+const rangeOver = (sc, so, ec, eo, inside) => ({
+  startContainer: sc, startOffset: so, endContainer: ec, endOffset: eo,
+  intersectsNode: (n) => inside.includes(n),
+});
+let takeFailed = 0;
+const takeFail = (msg) => { takeFailed++; console.log(`FAIL take selection: ${msg}`); };
+const within = sandbox.offsetsOfRange(rangeOver(runNodes[0].node, 5, runNodes[0].node, 11, [runNodes[0].node]));
+if (!within || within.text !== "quick brown") takeFail(`a selection inside one node is its run, got ${JSON.stringify(within)}`);
+const across = sandbox.offsetsOfRange(rangeOver(runNodes[0].node, 6, runNodes[2].node, 4, [runNodes[0].node, runNodes[1].node, runNodes[2].node]));
+if (!across || across.start !== 4 || across.text !== "quick brown fox jumps over") takeFail(`a selection across nodes snaps outward to words, got ${JSON.stringify(across)}`);
+const toElement = sandbox.offsetsOfRange(rangeOver(runNodes[1].node, 0, block, 2, [runNodes[1].node]));
+if (!toElement || toElement.text !== "fox jumps") takeFail(`a selection ending at an element takes the nodes before it whole, got ${JSON.stringify(toElement)}`);
+const nowhere = sandbox.offsetsOfRange(rangeOver(block, 0, block, 0, []));
+if (nowhere !== null) takeFail(`a selection over no text is nothing, got ${JSON.stringify(nowhere)}`);
+let ranges = [rangeOver(runNodes[2].node, 5, runNodes[2].node, 8, [runNodes[2].node])];
+let cleared = 0;
+sandbox.document.getSelection = () => ({
+  rangeCount: ranges.length, isCollapsed: ranges.length === 0, getRangeAt: (i) => ranges[i],
+  toString: () => "the", removeAllRanges: () => { cleared++; ranges = []; },
+});
+const taken = sandbox.takeSelection();
+if (!taken || taken.text !== "the") takeFail(`the page's selection is taken as a run, got ${JSON.stringify(taken)}`);
+if (cleared !== 1) takeFail("the selection goes with its handles once taken");
+if (sandbox.takeSelection() !== null) takeFail("with nothing selected there is nothing to take");
+ranges = [rangeOver(runNodes[2].node, 5, runNodes[2].node, 8, [runNodes[2].node])];
+sandbox.document.activeElement = { tagName: "INPUT" };
+if (sandbox.takeSelection() !== null) takeFail("a selection inside a field is the field's, not the book's");
+if (cleared !== 1) takeFail("a field's selection is left alone");
+sandbox.document.activeElement = null;
+const takeCases = 9;
+
+const total = cases.length + choiceCases.length + positionCases.length + 1 + restoreCases.length + 1 + selectionCases + mathCases.length + 3 + 2 + 4 + takeCases;
+failed += selectionFailed + reportFailed + takeFailed + mathFailed + renderFailed + layoutFailed;
 console.log(`${total - failed}/${total} book.js cases pass`);
 process.exit(failed ? 1 : 0);

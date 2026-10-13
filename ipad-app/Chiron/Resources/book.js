@@ -91,10 +91,13 @@ document.addEventListener("focusout", () => {
  * Chiron" in the selection's menu. A selection inside a beat's field is
  * the field's, not the book's. */
 let reportedSelection = "";
-function reportSelection() {
+function pageSelection() {
   const el = document.activeElement;
   const inField = !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA");
-  const sel = inField || !document.getSelection ? null : document.getSelection();
+  return inField || !document.getSelection ? null : document.getSelection();
+}
+function reportSelection() {
+  const sel = pageSelection();
   const text = sel ? String(sel).trim() : "";
   if (text === reportedSelection) return;
   reportedSelection = text;
@@ -257,6 +260,12 @@ function offsetsFromPoints(x1, y1, x2, y2) {
   let e = offsetOf(b.startContainer, b.startOffset, nodes);
   if (s < 0 || e < 0) return null;
   if (s > e) [s, e] = [e, s];
+  return snappedRun(s, e);
+}
+
+/* The run [s, e) of the article text snapped outward to word boundaries
+ * and in from whitespace. Null when nothing is left. */
+function snappedRun(s, e) {
   const text = articleText();
   const isWord = (c) => /[\w$\\^_{}.,'’-]/.test(c);
   while (s > 0 && isWord(text[s - 1])) s--;
@@ -265,6 +274,43 @@ function offsetsFromPoints(x1, y1, x2, y2) {
   while (e > s && /\s/.test(text[e - 1])) e--;
   if (e - s < 1) return null;
   return { start: s, end: e, text: text.slice(s, e) };
+}
+
+/* Offsets for a DOM range, snapped like a drag's. A range's ends can sit
+ * in an element rather than a text node (a selection dragged to the end
+ * of a paragraph ends after its last child), so each markable node the
+ * range touches is taken from where the range enters it to where it
+ * leaves, and whole when the range's end is not inside it. Whitespace at
+ * the range's ends is not words the reader chose (a paragraph's last node
+ * ends in a space), so it comes off before the snap, which would
+ * otherwise take in the next word. Null when the range covers none of
+ * the text. */
+function offsetsOfRange(range) {
+  let s = -1, e = -1;
+  for (const t of markableTextNodes()) {
+    if (!range.intersectsNode(t.node)) continue;
+    const from = t.node === range.startContainer ? range.startOffset : 0;
+    const to = t.node === range.endContainer ? range.endOffset : t.node.nodeValue.length;
+    if (s < 0) s = t.start + from;
+    e = t.start + to;
+  }
+  if (s < 0 || e <= s) return null;
+  const text = articleText();
+  while (s < e && /\s/.test(text[s])) s++;
+  while (e > s && /\s/.test(text[e - 1])) e--;
+  return snappedRun(s, e);
+}
+
+/* The page's own selection as a run, for a selecting tool picked while
+ * one is up: the reader chose the words already, so the tool takes them
+ * instead of asking for a drag over them. The selection goes with its
+ * handles, as a drag leaves none. A field's selection is the field's. */
+function takeSelection() {
+  const sel = pageSelection();
+  if (!sel || sel.isCollapsed || sel.rangeCount === 0) return null;
+  const run = offsetsOfRange(sel.getRangeAt(0));
+  sel.removeAllRanges();
+  return run;
 }
 
 /* Offsets of the first occurrence of query in the article text, ignoring

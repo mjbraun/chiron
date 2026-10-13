@@ -327,7 +327,32 @@ struct ReaderView: UIViewRepresentable {
                 selector.isEnabled = false
                 web?.scrollView.isScrollEnabled = true
             }
+            // Asked before the page is told the tool's drag is the
+            // selection, since that turns the page's own selection off.
+            takeSelection(for: tool)
             applySelecting()
+        }
+
+        /// Whether a tool picked while the reader has text selected with
+        /// the page's own handles works on that text: the words are chosen
+        /// already, so the question tool opens on them with no second drag.
+        /// The ink tools have no use for a selection.
+        static func takesSelection(_ tool: BookSession.Tool, selection: String) -> Bool {
+            switch tool {
+            case .highlighter, .ask, .note, .capture:
+                return !selection.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            case .none, .pen, .eraser:
+                return false
+            }
+        }
+
+        /// The page's own selection becomes the tool's run, the way a
+        /// drag's lift does, and the selection goes with its handles.
+        private func takeSelection(for tool: BookSession.Tool) {
+            guard let web = web as? BookWebView, pageReady,
+                  Self.takesSelection(tool, selection: web.selection) else { return }
+            web.selection = ""
+            take(run: "takeSelection()")
         }
 
         /// The page is told whether a tool's drag is the selection, so its
@@ -443,7 +468,13 @@ struct ReaderView: UIViewRepresentable {
         }
 
         private func select(from a: CGPoint, to b: CGPoint) {
-            web?.evaluateJavaScript("endSelection(\(a.x), \(a.y), \(b.x), \(b.y))") { [weak self] result, _ in
+            take(run: "endSelection(\(a.x), \(a.y), \(b.x), \(b.y))")
+        }
+
+        /// The run the page answers with goes to the tool that is up: a
+        /// highlight, a question or a note on it, or a capture of it.
+        private func take(run js: String) {
+            web?.evaluateJavaScript(js) { [weak self] result, _ in
                 guard let self, let r = result as? [String: Any],
                       let start = r["start"] as? Int, let end = r["end"] as? Int, let text = r["text"] as? String else { return }
                 Task { @MainActor in
