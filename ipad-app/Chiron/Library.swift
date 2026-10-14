@@ -211,8 +211,14 @@ final class Library: ObservableObject {
         saveQueue()
         requestError = nil
         let sent = await sendQueued()
-        await refreshRequests()
-        if let r = sent[q.id] { return r }
+        if let r = sent[q.id] {
+            await refreshRequests()
+            return r
+        }
+        // The sprite did not take it: it waits here and goes when the
+        // sprite answers; asking again this instant would only fail the
+        // same way.
+        watchRequests()
         return queued.first(where: { $0.id == q.id }).map(Self.placeholder) ?? Self.placeholder(q)
     }
 
