@@ -10,6 +10,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/mjbraun/chiron/server/llm"
 	"github.com/mjbraun/chiron/server/roles"
 	"github.com/mjbraun/chiron/server/sources"
 )
@@ -353,7 +354,7 @@ func dropTopLevelKey(front, key string) string {
 
 // importItems turns the exercises of the unit's adaptable sources into
 // bank items, kept in imported.yaml beside the unit so a rerun reuses them.
-func (g *Generator) importItems(ctx context.Context, dir string, u unitPlan, unitYAML []byte, spec, bank string) (string, error) {
+func (g *Generator) importItems(ctx context.Context, chain llm.Chain, dir string, u unitPlan, unitYAML []byte, spec, bank string) (string, error) {
 	if len(u.Sources) == 0 || g.Fetch == nil {
 		return "", nil
 	}
@@ -376,7 +377,7 @@ func (g *Generator) importItems(ctx context.Context, dir string, u unitPlan, uni
 	if len(imported) == 0 {
 		return "", nil
 	}
-	items, err := roles.ImportItems(g.Chain, u.ID, string(unitYAML), spec, bank, imported)
+	items, err := roles.ImportItems(chain, u.ID, string(unitYAML), spec, bank, imported)
 	if err != nil || items == "" {
 		return "", err
 	}

@@ -46,6 +46,8 @@ final class Library: ObservableObject {
     @Published var pendingCapture: Capture?
     /// A summary or a detail, answered in the capture card.
     @Published var captureAnswer: String?
+    /// The call that wrote the capture's answer, for its About card.
+    @Published var captureGenerated: GeneratedCall?
     /// A draft being planned in conversation; the planning card shows it.
     @Published var planning: PlanState?
     @Published var planBusy = false
@@ -437,6 +439,7 @@ final class Library: ObservableObject {
         let reply = try await service.capture(req)
         if scale.immediate {
             captureAnswer = reply.answerMd ?? ""
+            captureGenerated = reply.generated
             return reply
         }
         guard let id = reply.subject else { throw URLError(.badServerResponse) }
@@ -448,6 +451,7 @@ final class Library: ObservableObject {
                               brief: reply.brief, done: reply.done ?? false, plan: plan, book: nil)
         pendingCapture = nil
         captureAnswer = nil
+        captureGenerated = nil
         await refresh()
         // One sheet gives way to the next; presenting both in the same
         // beat leaves the second unshown.

@@ -115,6 +115,8 @@ final class BookSession: ObservableObject {
     }
     /// A question being asked or answered, shown in the ask card.
     @Published var asking: Asking?
+    /// The About card: the calls that wrote the chapter, or an answer.
+    @Published var about: Provenance?
     /// Items the reader has flagged as wrong, by id. The server keeps the
     /// concern; this is what the check shows as done.
     @Published private(set) var flagged: Set<String> = []
@@ -824,8 +826,11 @@ final class BookSession: ObservableObject {
         asking = a
         do {
             let answer: String
+            var generated: GeneratedCall?
             do {
-                answer = try await service.ask(subject: subjectID, unit: unit, quote: a.mark.text, question: q, history: history).answerMd
+                let reply = try await service.ask(subject: subjectID, unit: unit, quote: a.mark.text, question: q, history: history)
+                answer = reply.answerMd
+                generated = reply.generated
             } catch let away {
                 // The tutor out of reach: the device answers from the
                 // chapter, and the reader is told so.
@@ -835,9 +840,11 @@ final class BookSession: ObservableObject {
             }
             if followUp, var thread = a.mark.thread, !thread.isEmpty {
                 thread[thread.count - 1].answer = answer
+                thread[thread.count - 1].generated = generated
                 a.mark.thread = thread
             } else {
                 a.mark.answer = answer
+                a.mark.generated = generated
             }
         } catch {
             a.error = "The tutor can't be reached. Try again."
@@ -846,6 +853,20 @@ final class BookSession: ObservableObject {
         asking = a
         if let i = marks.firstIndex(where: { $0.id == a.mark.id }) { marks[i] = a.mark }
         persistMarks()
+    }
+
+    /// The record of the open chapter's writing; nil when nobody wrote it.
+    var chapterProvenance: Provenance? {
+        guard let ch = chapter, !ch.provenance.isEmpty else { return nil }
+        return Provenance(title: ch.title, subject: subjectID, calls: ch.provenance)
+    }
+
+    /// The About card for the chapter, from the toolbar or the colophon.
+    func showAbout() { about = chapterProvenance }
+
+    /// The About card for one answer on a mark.
+    func showAbout(answer call: GeneratedCall) {
+        about = Provenance(title: "This answer", subject: subjectID, calls: [call])
     }
 
     /// The question, its thread and its highlight go together.

@@ -65,10 +65,10 @@ struct AskCard: View {
             if let a = asking, let q = a.mark.question {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 10) {
-                        turn(question: q, answer: a.mark.answer)
+                        turn(question: q, answer: a.mark.answer, generated: a.mark.generated)
                         ForEach(Array((a.mark.thread ?? []).enumerated()), id: \.offset) { _, t in
                             Divider()
-                            turn(question: t.question, answer: t.answer)
+                            turn(question: t.question, answer: t.answer, generated: t.generated)
                         }
                     }
                 }
@@ -123,7 +123,7 @@ struct AskCard: View {
     }
 
     @ViewBuilder
-    private func turn(question: String, answer: String?) -> some View {
+    private func turn(question: String, answer: String?, generated: GeneratedCall? = nil) -> some View {
         Text(question)
             .font(Typography.sans(17, weight: .semibold))
         if let answer {
@@ -133,6 +133,9 @@ struct AskCard: View {
                     .font(Typography.serif(16))
             } else {
                 MathText(text: answer, size: 16, rich: true)
+                if let generated {
+                    GeneratedLine(calls: [generated]) { session.showAbout(answer: generated) }
+                }
             }
         }
     }

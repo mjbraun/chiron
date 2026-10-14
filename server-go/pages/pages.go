@@ -713,6 +713,9 @@ pre { border: 2px solid #000; padding: 16px; overflow: hidden; page-break-inside
 blockquote, .planner-note { border-left: 2px solid #000; margin: 24px 0; padding: 8px 0 8px 28px; font-style: italic; font-size: 32px; line-height: 48px; color: #333; }
 blockquote p, .planner-note p { font-size: 32px; line-height: 48px; text-align: left; hyphens: none; }
 .katex-display { margin: 26px 0; page-break-inside: avoid; }
+.sources { margin-top: 60px; padding-top: 20px; border-top: 2px solid #000; font-size: 28px; line-height: 40px; color: #333; }
+.sources h2 { font-size: 28px; line-height: 40px; letter-spacing: 2px; text-transform: uppercase; margin: 0 0 12px 0; }
+.colophon { margin-top: 48px; font-size: 26px; line-height: 36px; color: #888; }
 .beat-box { border: 2px solid #000; margin: 30px 0; padding: 24px 28px 0 28px; page-break-inside: avoid; }
 .beat-label { font-size: 22px; line-height: 28px; font-weight: 600; letter-spacing: 0.10em; text-transform: uppercase; color: #444; margin-bottom: 22px; }
 .beat-prompt { font-size: 32px; line-height: 48px; }

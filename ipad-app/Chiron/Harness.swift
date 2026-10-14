@@ -17,6 +17,7 @@ import Network
 ///   POST /place  {level}     answer the placement screener
 ///   POST /check              enter the check from the reader
 ///   POST /contents           toggle the contents (sidebar or sheet)
+///   POST /about              toggle the About card: who wrote the chapter, when, with the prompts
 ///   POST /chrome             toggle the reader chrome, as a tap on the page does
 ///   POST /tool {tool}        pick a palette tool: none | pen | highlighter | ask | eraser
 ///   POST /mark {text, kind}  highlight the first occurrence of text (kind: highlight | question)

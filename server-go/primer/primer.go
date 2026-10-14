@@ -14,6 +14,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/mjbraun/chiron/server/llm"
 )
 
 const (
@@ -73,6 +75,9 @@ type Meta struct {
 	// and the writing; otherwise the writer titles it.
 	Named bool   `json:"named,omitempty"`
 	Book  string `json:"book,omitempty"`
+	// Provenance is every model call that wrote the document: the
+	// primer itself, then each section a margin note added.
+	Provenance []llm.Call `json:"provenance,omitempty"`
 }
 
 // Draft is true while the capture is still a plan, or failed before it

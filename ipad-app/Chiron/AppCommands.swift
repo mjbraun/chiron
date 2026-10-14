@@ -288,6 +288,8 @@ enum AppCommands {
             session.beginCheck()
         case "contents":
             session.contentsShown.toggle()
+        case "about":
+            if session.about == nil { session.showAbout() } else { session.about = nil }
         case "chrome":
             session.toggleChrome()
         case "tool":
@@ -460,6 +462,8 @@ enum AppCommands {
             out["wait"] = s.wait?.rawValue ?? ""
             out["authoring_stage"] = s.authoringStage ?? ""
             out["contents"] = s.contentsShown
+            out["about"] = s.about != nil
+            out["written_by"] = s.chapter?.provenance.models ?? []
             out["chrome_hidden"] = s.chromeHidden
             out["tool"] = s.tool.rawValue
             out["pen_color"] = s.penColor.rawValue

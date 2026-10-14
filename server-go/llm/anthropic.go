@@ -57,6 +57,9 @@ func NewAnthropic(model string) *Anthropic {
 	return a
 }
 
+// ModelFor names the model every role runs on here.
+func (a *Anthropic) ModelFor(role string) string { return a.Model }
+
 func (a *Anthropic) Status() Status {
 	return Status{
 		Connected: a.client != nil,

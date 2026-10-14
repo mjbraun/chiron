@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/mjbraun/chiron/server/corpus"
+	"github.com/mjbraun/chiron/server/llm"
 	"github.com/mjbraun/chiron/server/primer"
 	"github.com/mjbraun/chiron/server/render"
 	"github.com/mjbraun/chiron/server/roles"
@@ -206,7 +207,8 @@ func (s *Server) handlePrimerCapture(w http.ResponseWriter, r *http.Request) {
 	cap := roles.Capture{Text: req.Text, URL: req.SourceURL, App: req.SourceApp, Prompt: req.Prompt}
 
 	if req.Scale == roles.ScaleSummary || req.Scale == roles.ScaleDetail {
-		md, err := roles.AnswerCapture(s.chain, cap, req.Scale)
+		rec := llm.Record(s.chain)
+		md, err := roles.AnswerCapture(rec, cap, req.Scale)
 		if err != nil && driveEnabled() && !s.chain.Status().Connected {
 			md, err = fmt.Sprintf("[stub %s] You asked: %s\n\nAbout: %s", req.Scale, cap.Prompt, clipText(cap.Text, 300)), nil
 		}
@@ -214,7 +216,13 @@ func (s *Server) handlePrimerCapture(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadGateway, "no answer: %v", err)
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"scale": req.Scale, "answer_md": md})
+		out := map[string]any{"scale": req.Scale, "answer_md": md}
+		if calls := rec.Calls(); len(calls) > 0 {
+			// The card is the only place this is read, so the whole
+			// record rides with it.
+			out["generated"] = calls[0]
+		}
+		writeJSON(w, http.StatusOK, out)
 		return
 	}
 
@@ -651,7 +659,8 @@ func (s *Server) authorPrimer(m *primer.Meta, brief string) {
 		log.Printf("primer %s: %v", m.ID, err)
 	}
 	cap := roles.Capture{Text: m.Source.Text, URL: m.Source.URL, App: m.Source.App, Prompt: m.Prompt, Brief: brief}
-	title, doc, err := roles.AuthorPrimer(s.chain, cap)
+	rec := llm.Record(s.chain)
+	title, doc, err := roles.AuthorPrimer(rec, cap)
 	if err != nil && driveEnabled() && !s.chain.Status().Connected {
 		title, doc, err = stubPrimer(cap)
 	}
@@ -659,6 +668,7 @@ func (s *Server) authorPrimer(m *primer.Meta, brief string) {
 		fail(err)
 		return
 	}
+	m.Provenance = rec.Calls()
 	if !m.Named {
 		m.Title = title
 	}
@@ -724,7 +734,8 @@ func (s *Server) handlePrimerExtend(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "read primer: %v", err)
 		return
 	}
-	heading, body, err := roles.ExtendPrimer(s.chain, doc, req.Quote, req.Note)
+	rec := llm.Record(s.chain)
+	heading, body, err := roles.ExtendPrimer(rec, doc, req.Quote, req.Note)
 	if err != nil && driveEnabled() && !s.chain.Status().Connected {
 		heading, body, err = "[stub] "+workingTitle(req.Note), fmt.Sprintf("On \"%s\" you noted: %s\n\nA dev server without a model cannot write this section.", clipText(req.Quote, 200), req.Note), nil
 	}
@@ -743,6 +754,7 @@ func (s *Server) handlePrimerExtend(w http.ResponseWriter, r *http.Request) {
 	}
 	s.mu.Lock()
 	sub.Corpus = c
+	m.Provenance = append(m.Provenance, rec.Calls()...)
 	s.mu.Unlock()
 	os.Remove(chapterPath(sub, primer.UnitID))
 
@@ -768,7 +780,12 @@ func (s *Server) buildPrimerChapter(sub *Subject, unitID string) (*render.Chapte
 	if !ok {
 		return nil, fmt.Errorf("unit %s not authored", unitID)
 	}
-	ch, err := render.RenderChapter(unit, roles.VerbatimSections(unit), render.Directives{NextAction: "read"}, nil, nil)
+	d := render.Directives{NextAction: "read"}
+	if sub.Primer != nil {
+		// A primer is a model's writing; a page read as it is is not.
+		d.Generated = sub.Primer.Provenance
+	}
+	ch, err := render.RenderChapter(unit, roles.VerbatimSections(unit), d, nil, nil)
 	if err != nil {
 		return nil, err
 	}

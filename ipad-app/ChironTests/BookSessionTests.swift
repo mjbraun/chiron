@@ -93,6 +93,8 @@ final class FakeService: ChironService {
         histories.append(history)
         return try onAsk(unit, quote, question)
     }
+    var onGenerated: (String, String) throws -> GeneratedCall = { _, _ in throw URLError(.cannotConnectToHost) }
+    func generated(subject: String, ref: String) async throws -> GeneratedCall { try onGenerated(subject, ref) }
     func flag(subject: String, unit: String, item: String, text: String, response: ItemResponse?) async throws -> FlagResponse {
         flags.append((unit, item, text, response))
         return try onFlag(unit, item, text)
@@ -1183,6 +1185,41 @@ final class AskThreadTests: XCTestCase {
         s.deleteAsking()
         XCTAssertNil(s.asking)
         XCTAssertTrue(s.marks.isEmpty, "delete removes the question and its highlight")
+    }
+
+    /// An answer the tutor wrote comes with who wrote it and when, kept
+    /// on the mark beside the answer (the brief alone: the prompt stays on
+    /// the server under its ref). The About card shows it; a chapter nobody
+    /// generated has no card.
+    func testAnAnswerKeepsWhoWroteIt() async throws {
+        let fake = FakeService()
+        var n = 0
+        fake.onAsk = { _, _, q in
+            n += 1
+            return AskResponse(unit: "u1", answerMd: "answer \(n)",
+                               generated: GeneratedCall(role: "planner", name: "answer", model: "claude-fable-5-1",
+                                                        at: "2026-10-14T13:45:00Z", seconds: 4.2, ref: "ask-\(n)"))
+        }
+        let s = session(fake)
+        XCTAssertNil(s.chapterProvenance, "a chapter with no record has no About")
+        s.showAbout()
+        XCTAssertNil(s.about)
+
+        _ = s.addMark(kind: .question, start: 0, end: 22, text: "predict the next token")
+        await s.ask("why tokens?")
+        XCTAssertEqual(s.asking?.mark.generated?.model, "claude-fable-5-1")
+        XCTAssertEqual(s.asking?.mark.generated?.ref, "ask-1")
+        XCTAssertFalse(s.asking?.mark.generated?.hasPrompts ?? true, "the brief travels, not the prompt")
+        XCTAssertEqual(s.marks.first?.generated?.ref, "ask-1", "kept on the mark")
+        await s.ask("and subwords?")
+        XCTAssertEqual(s.asking?.mark.thread?.first?.generated?.ref, "ask-2")
+        XCTAssertEqual(s.asking?.mark.history.first?.generated?.ref, "ask-1", "the history carries it too")
+
+        let call = try XCTUnwrap(s.asking?.mark.generated)
+        s.showAbout(answer: call)
+        XCTAssertEqual(s.about?.title, "This answer")
+        XCTAssertEqual(s.about?.subject, "ai")
+        XCTAssertEqual(s.about?.calls, [call])
     }
 }
 

@@ -461,6 +461,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /pages/{subject}/contents/{page}", s.handleContentsPage)
 	mux.HandleFunc("POST /ink/{subject}", s.handleInk)
 	mux.HandleFunc("POST /ask/{subject}", s.handleAsk)
+	mux.HandleFunc("GET /generated/{subject}/{ref}", s.handleGenerated)
 	mux.HandleFunc("POST /flag/{subject}", s.handleFlag)
 	mux.HandleFunc("GET /flags/{subject}", s.handleFlagList)
 	mux.HandleFunc("POST /primer/capture", s.handlePrimerCapture)

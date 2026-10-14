@@ -3,9 +3,14 @@ package httpapi
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
+	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 
+	"github.com/mjbraun/chiron/server/llm"
 	"github.com/mjbraun/chiron/server/roles"
 	"github.com/mjbraun/chiron/server/state"
 )
@@ -50,7 +55,8 @@ func (s *Server) handleAsk(w http.ResponseWriter, r *http.Request) {
 	}
 	s.markActive(sub.ID)
 
-	answer, err := roles.AnswerQuestion(s.chain, unit, req.Quote, req.Question, req.History, sub.Learner)
+	rec := llm.Record(s.chain)
+	answer, err := roles.AnswerQuestion(rec, unit, req.Quote, req.Question, req.History, sub.Learner)
 	if err != nil && driveEnabled() && !s.chain.Status().Connected {
 		// A dev server without a model still lets a client exercise the
 		// whole ask flow; the stub names itself.
@@ -66,9 +72,66 @@ func (s *Server) handleAsk(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "record question: %v", err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
+	out := map[string]any{
 		"unit":      unit.ID,
 		"answer_md": answer,
 		"n":         ev.N,
-	})
+	}
+	if calls := rec.Calls(); len(calls) > 0 {
+		// The answer travels with who wrote it and when; the prompt, a
+		// section of the chapter long, stays here under the question's
+		// number, for the reader who asks to see it.
+		call := calls[0]
+		call.Ref = fmt.Sprintf("ask-%d", ev.N)
+		if err := keepGenerated(sub, call); err != nil {
+			log.Printf("ask %s: keep record: %v", sub.ID, err)
+		}
+		out["generated"] = call.Brief()
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+// A record of a model call kept on its own, for an answer whose prompt is
+// too big to travel with the mark it is shown beside.
+
+var generatedRef = regexp.MustCompile(`^[a-z]+-[0-9]+$`)
+
+func generatedPath(sub *Subject, ref string) string {
+	return filepath.Join(sub.StateDir, "generated", ref+".json")
+}
+
+func keepGenerated(sub *Subject, call llm.Call) error {
+	if !generatedRef.MatchString(call.Ref) {
+		return fmt.Errorf("bad ref %q", call.Ref)
+	}
+	if err := os.MkdirAll(filepath.Dir(generatedPath(sub, call.Ref)), 0o755); err != nil {
+		return err
+	}
+	data, err := json.Marshal(call)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(generatedPath(sub, call.Ref), data, 0o644)
+}
+
+// GET /generated/{subject}/{ref}: the whole record of one call, prompts
+// and all.
+func (s *Server) handleGenerated(w http.ResponseWriter, r *http.Request) {
+	sub, ok := s.subject(r.PathValue("subject"))
+	if !ok {
+		http.Error(w, "unknown subject", http.StatusNotFound)
+		return
+	}
+	ref := r.PathValue("ref")
+	if !generatedRef.MatchString(ref) {
+		writeError(w, http.StatusBadRequest, "not a record: %q", ref)
+		return
+	}
+	data, err := os.ReadFile(generatedPath(sub, ref))
+	if err != nil {
+		writeError(w, http.StatusNotFound, "no record %q", ref)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(data)
 }

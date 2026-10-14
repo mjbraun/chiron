@@ -45,7 +45,7 @@ func (c *stubChain) Structured(role, system, user string, schema map[string]any,
 	return json.Unmarshal(data, out)
 }
 
-func (stubChain) Status() llm.Status { return llm.Status{Connected: true} }
+func (stubChain) Status() llm.Status { return llm.Status{Connected: true, Model: "stub-model"} }
 
 func TestNamesInABriefAreFound(t *testing.T) {
 	got := NamedInBrief(`A short book on Bayesian statistics for an engineer, starting from "Think Bayes" by Allen Downey and interleaving content from MIT 18.05 Introduction to Probability and Statistics, with worked examples.`)
@@ -177,6 +177,28 @@ func TestABookIsPlannedAndAuthoredFromANamedSource(t *testing.T) {
 	}
 	if imported, err := os.ReadFile(filepath.Join(unitDir, "imported.yaml")); err != nil || !strings.Contains(string(imported), "u0-e1") {
 		t.Fatalf("imported.yaml: %v %q", err, imported)
+	}
+	// The calls that wrote the unit are on record beside its files: the
+	// canon, the imported items, the bank, the misconceptions and the
+	// depths, each naming the model and carrying its prompt.
+	var record []llm.Call
+	if raw, err := os.ReadFile(filepath.Join(unitDir, "provenance.json")); err != nil {
+		t.Fatal("provenance.json was not written")
+	} else if err := json.Unmarshal(raw, &record); err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, c := range record {
+		names = append(names, c.Name)
+		if c.Model != "stub-model" || c.Role != "author" || c.At.IsZero() {
+			t.Fatalf("call = %+v", c)
+		}
+	}
+	if got := strings.Join(names, ","); !strings.HasPrefix(got, "canon_md,imported_items,questions_yaml,misconceptions_yaml,content") {
+		t.Fatalf("recorded calls = %s", got)
+	}
+	if !strings.Contains(record[0].Prompt, "MATERIAL TO ADAPT") {
+		t.Fatal("the canon call's prompt is not the one the author saw")
 	}
 
 	// A unit with no sources is authored from the brief, with no material block.

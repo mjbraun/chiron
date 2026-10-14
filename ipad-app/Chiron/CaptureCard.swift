@@ -15,6 +15,7 @@ struct CaptureCard: View {
     @State private var sending = false
     @State private var error: String?
     @FocusState private var typing: Bool
+    @State private var about: Provenance?
 
     private var fromElsewhere: Bool { capture.sourceApp != nil || capture.sourceURL != nil || capture.imagePNG != nil }
 
@@ -25,6 +26,9 @@ struct CaptureCard: View {
                 if let answer = library.captureAnswer {
                     Section {
                         MathText(text: answer, size: 16, rich: true)
+                        if let g = library.captureGenerated {
+                            GeneratedLine(calls: [g]) { about = Provenance(title: "This answer", calls: [g]) }
+                        }
                         Button {
                             scale = .primer
                             submit()
@@ -119,6 +123,7 @@ struct CaptureCard: View {
             .onChange(of: library.captureAnswer) { _, answer in
                 if answer != nil { typing = false }
             }
+            .sheet(item: $about) { ProvenanceCard(provenance: $0) }
         }
         .presentationSizing(.form)
     }

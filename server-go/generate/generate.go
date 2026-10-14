@@ -13,6 +13,7 @@ package generate
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -377,6 +378,15 @@ func (g *Generator) authorUnit(u unitPlan, learner, bank, spec string) error {
 		return err
 	}
 	ctx := context.Background()
+	// Every call that writes a file of this unit is recorded beside the
+	// files, so a chapter built from them can say who wrote them and
+	// show the prompts. A rerun adds to the record it finds.
+	rec := llm.Record(g.Chain)
+	defer func() {
+		if err := writeProvenance(dir, rec.Calls()); err != nil {
+			log.Printf("generate: %s: provenance: %v", u.ID, err)
+		}
+	}()
 	material, provs, err := g.material(ctx, dir, u)
 	if err != nil {
 		return err
@@ -404,7 +414,7 @@ func (g *Generator) authorUnit(u unitPlan, learner, bank, spec string) error {
 			prompt = withMaterial
 		}
 		var out map[string]string
-		if err := g.Chain.Structured("author", unitSystem, prompt+"\n\n"+extra,
+		if err := rec.Structured("author", unitSystem, prompt+"\n\n"+extra,
 			fileSchema(key, description), key, &out); err != nil {
 			return "", err
 		}
@@ -452,7 +462,7 @@ func (g *Generator) authorUnit(u unitPlan, learner, bank, spec string) error {
 	// bank, so a source's worked problems are the check rather than a
 	// paraphrase of them. A failed import costs the unit those items, not
 	// the unit.
-	imported, err := g.importItems(ctx, dir, u, unitYAML, spec, bank)
+	imported, err := g.importItems(ctx, rec, dir, u, unitYAML, spec, bank)
 	if err != nil {
 		log.Printf("generate: %s: importing exercises: %v", u.ID, err)
 	}
@@ -497,6 +507,27 @@ func (g *Generator) authorUnit(u unitPlan, learner, bank, spec string) error {
 		}
 	}
 	return nil
+}
+
+// writeProvenance keeps the unit's record of model calls, provenance.json
+// in the unit's directory, after whatever an earlier run recorded there.
+func writeProvenance(dir string, calls []llm.Call) error {
+	if len(calls) == 0 {
+		return nil
+	}
+	path := filepath.Join(dir, "provenance.json")
+	var all []llm.Call
+	if raw, err := os.ReadFile(path); err == nil {
+		if err := json.Unmarshal(raw, &all); err != nil {
+			return fmt.Errorf("existing record: %w", err)
+		}
+	}
+	all = append(all, calls...)
+	data, err := json.MarshalIndent(all, "", " ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0o644)
 }
 
 // withChoiceChecks adds `check: choice` to every `kind: mcq` item that has

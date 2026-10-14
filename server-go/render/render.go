@@ -22,6 +22,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/mjbraun/chiron/server/corpus"
+	"github.com/mjbraun/chiron/server/llm"
 )
 
 var beatFence = regexp.MustCompile("(?s)```beat[ \t]*\n(.*?)```")
@@ -114,6 +115,11 @@ type AssembledSection struct {
 type Directives struct {
 	OpeningNoteMD string `json:"opening_note_md"`
 	NextAction    string `json:"next_action"`
+	// Generated is every model call that wrote what the chapter shows:
+	// the unit's own authoring, if a model wrote the unit, then the
+	// planning and the rewrite for this reading. It becomes the
+	// chapter's provenance and its colophon.
+	Generated []llm.Call `json:"-"`
 }
 
 // ClientItem is a question as shipped to the app. Reference answers and rubrics
@@ -150,6 +156,10 @@ type Chapter struct {
 	// BankHash fingerprints the question bank the items came from, so a
 	// stored chapter is known stale when the corpus is rewritten under it.
 	BankHash string `json:"bank_hash,omitempty"`
+	// Provenance is every model call that wrote the chapter, oldest
+	// first, prompts and times included: the reader can ask what was
+	// asked of which model, and when.
+	Provenance []llm.Call `json:"provenance,omitempty"`
 }
 
 func RenderChapter(u *corpus.Unit, sections []AssembledSection, d Directives,
@@ -197,6 +207,9 @@ func RenderChapter(u *corpus.Unit, sections []AssembledSection, d Directives,
 		b.WriteString("</ul></section>")
 		parts = append(parts, b.String())
 	}
+	if colophon := Colophon(d.Generated); colophon != "" {
+		parts = append(parts, colophon)
+	}
 
 	ch := &Chapter{
 		Unit: u.ID, Title: u.Title, Minutes: u.Minutes,
@@ -205,8 +218,31 @@ func RenderChapter(u *corpus.Unit, sections []AssembledSection, d Directives,
 		Calibration: u.IsCalibration(),
 		NextAction:  d.NextAction,
 		Sources:     attributions,
+		Provenance:  d.Generated,
 	}
 	return ch, nil
+}
+
+// Colophon is the chapter's last line: the model that wrote it, named
+// quietly at the very end. Nothing when no call wrote it, or none of
+// the calls can name its model.
+func Colophon(calls []llm.Call) string {
+	line := colophonLine(llm.Models(calls))
+	if line == "" {
+		return ""
+	}
+	return `<footer class="colophon">` + htmlEscape(line) + `</footer>`
+}
+
+func colophonLine(models []string) string {
+	switch n := len(models); {
+	case n == 0:
+		return ""
+	case n == 1:
+		return "Written by " + models[0]
+	default:
+		return "Written by " + strings.Join(models[:n-1], ", ") + " and " + models[n-1]
+	}
 }
 
 // Attributions reads the `sources:` list a unit's front matter carries

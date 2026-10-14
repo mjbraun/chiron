@@ -3,6 +3,80 @@ import Foundation
 // Chapter payloads carry pieces the webview owns (html, beats) as opaque JSON
 // and pieces native UI owns (check items) as typed models.
 
+/// One model call that wrote something the reader sees: which role asked,
+/// what it asked for, of which model, with what prompts, and when. A
+/// chapter carries every call that wrote it, prompts included; an answer
+/// carries the brief (no prompts) and a `ref` the whole record is fetched
+/// by, since a chapter's worth of prompt should not ride on every mark.
+struct GeneratedCall: Codable, Equatable {
+    var role: String
+    var name: String?
+    var model: String?
+    var system: String?
+    var prompt: String?
+    /// RFC3339, UTC, as the server writes it.
+    var at: String
+    var seconds: Double?
+    var ref: String?
+
+    init(role: String, name: String? = nil, model: String? = nil, system: String? = nil,
+         prompt: String? = nil, at: String, seconds: Double? = nil, ref: String? = nil) {
+        self.role = role; self.name = name; self.model = model; self.system = system
+        self.prompt = prompt; self.at = at; self.seconds = seconds; self.ref = ref
+    }
+
+    /// The record's time as a date; nil when the stamp does not parse.
+    var date: Date? { GeneratedCall.parse(at) }
+
+    /// Whether the prompts came along, or only where to fetch them.
+    var hasPrompts: Bool { !(prompt ?? "").isEmpty || !(system ?? "").isEmpty }
+
+    /// What the role is for, in the reader's words.
+    var purpose: String {
+        switch (role, name ?? "") {
+        case ("planner", "directives"): return "Planning the chapter"
+        case ("author", "rewrite"): return "Writing the chapter"
+        case ("author", "repair"): return "Writing the repair"
+        case ("author", "primer"): return "Writing the primer"
+        case ("author", "primer_section"): return "Adding a section"
+        case ("author", "canon_md"): return "Writing the unit"
+        case ("author", "questions_yaml"): return "Writing the questions"
+        case ("author", "imported_items"): return "Importing exercises"
+        case ("author", "misconceptions_yaml"): return "Writing the misconceptions"
+        case ("author", "content"): return "Writing a depth variant"
+        case ("planner", "answer"): return "Answering the question"
+        case ("author", let n) where n.hasPrefix("capture-"): return "Answering the capture"
+        case (let r, _): return r.prefix(1).uppercased() + String(r.dropFirst())
+        }
+    }
+
+    private static let fractional: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f
+    }()
+    private static let whole: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime]
+        return f
+    }()
+    static func parse(_ stamp: String) -> Date? {
+        whole.date(from: stamp) ?? fractional.date(from: stamp)
+    }
+}
+
+extension Array where Element == GeneratedCall {
+    /// Each model named once, in order of first use.
+    var models: [String] {
+        var out: [String] = []
+        for c in self {
+            guard let m = c.model, !m.isEmpty, !out.contains(m) else { continue }
+            out.append(m)
+        }
+        return out
+    }
+}
+
 struct ChapterPayload: Codable, Identifiable {
     let unit: String
     let title: String
@@ -15,6 +89,9 @@ struct ChapterPayload: Codable, Identifiable {
     // no gate verdict - the score is measurement.
     let calibration: Bool?
     let nextAction: String?
+    /// Every model call that wrote the chapter, oldest first; empty for a
+    /// chapter nobody generated (a page read as it is, a cold start).
+    let provenance: [GeneratedCall]
 
     /// The unit a chapter grades against: itself, or for a repair chapter
     /// ("u1.repair": the misses of a failed check, then those items
@@ -46,7 +123,7 @@ struct ChapterPayload: Codable, Identifiable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case unit, title, minutes, html, beats, pretest, check, calibration
+        case unit, title, minutes, html, beats, pretest, check, calibration, provenance
         case nextAction = "next_action"
     }
 
@@ -63,6 +140,7 @@ struct ChapterPayload: Codable, Identifiable {
         check = try c.decodeIfPresent([CheckItem].self, forKey: .check) ?? []
         calibration = try c.decodeIfPresent(Bool.self, forKey: .calibration)
         nextAction = try c.decodeIfPresent(String.self, forKey: .nextAction)
+        provenance = try c.decodeIfPresent([GeneratedCall].self, forKey: .provenance) ?? []
     }
 }
 
@@ -370,9 +448,12 @@ struct CaptureResponse: Codable {
     var replyMd: String?
     var done: Bool?
     var brief: String?
+    /// The call that wrote the answer, whole: the card is the only place
+    /// it is read.
+    var generated: GeneratedCall?
 
     enum CodingKeys: String, CodingKey {
-        case scale, subject, status, title, done, brief
+        case scale, subject, status, title, done, brief, generated
         case answerMd = "answer_md"
         case replyMd = "reply_md"
     }
@@ -711,9 +792,12 @@ enum JSONValue: Codable {
 struct AskResponse: Codable {
     let unit: String
     let answerMd: String
+    /// Who wrote the answer and when, with the ref its prompt is kept
+    /// under on the server.
+    var generated: GeneratedCall? = nil
 
     enum CodingKeys: String, CodingKey {
-        case unit
+        case unit, generated
         case answerMd = "answer_md"
     }
 }
@@ -744,6 +828,8 @@ struct Mark: Codable, Identifiable, Equatable {
     let text: String
     var question: String?
     var answer: String?
+    /// Who wrote the answer and when; nil for an answer the device gave.
+    var generated: GeneratedCall?
     /// Follow-ups after the first question, oldest first.
     var thread: [QA]?
 
@@ -751,7 +837,7 @@ struct Mark: Codable, Identifiable, Equatable {
     /// history: only turns that were answered.
     var history: [QA] {
         var turns: [QA] = []
-        if let q = question, let a = answer { turns.append(QA(question: q, answer: a)) }
+        if let q = question, let a = answer { turns.append(QA(question: q, answer: a, generated: generated)) }
         for t in thread ?? [] where t.answer != nil { turns.append(t) }
         return turns
     }
@@ -761,6 +847,11 @@ struct Mark: Codable, Identifiable, Equatable {
 struct QA: Codable, Equatable {
     var question: String
     var answer: String?
+    var generated: GeneratedCall?
+
+    init(question: String, answer: String? = nil, generated: GeneratedCall? = nil) {
+        self.question = question; self.answer = answer; self.generated = generated
+    }
 }
 
 /// A key sshd on the sprite accepts; the app's own shows up here after

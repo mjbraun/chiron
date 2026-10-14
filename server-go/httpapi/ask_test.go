@@ -21,7 +21,7 @@ func (c *cannedChain) Structured(role, system, user string, schema map[string]an
 	data, _ := json.Marshal(c.payload)
 	return json.Unmarshal(data, out)
 }
-func (cannedChain) Status() llm.Status { return llm.Status{Connected: true} }
+func (cannedChain) Status() llm.Status { return llm.Status{Connected: true, Model: "canned-model"} }
 
 // The reader highlights a passage, asks, and gets an answer in the same
 // request; the question lands in the learner state and marks the book open.

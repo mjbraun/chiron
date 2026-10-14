@@ -14,8 +14,13 @@ const here = dirname(fileURLToPath(import.meta.url));
 const res = join(here, "../ipad-app/Chiron/Resources");
 const src = readFileSync(join(res, "math.js"), "utf8") + "\n" + readFileSync(join(res, "book.js"), "utf8");
 const noop = () => {};
+// The page's own listeners, kept so a test can send it an event.
+const listeners = {};
 const sandbox = {
-  document: { addEventListener: noop, getElementById: () => null, querySelector: () => null },
+  document: {
+    addEventListener: (type, fn) => { (listeners[type] ||= []).push(fn); },
+    getElementById: () => null, querySelector: () => null,
+  },
   window: { addEventListener: noop, scrollTo: noop, scrollY: 0, webkit: undefined },
   setTimeout, clearTimeout, console,
 };
@@ -289,6 +294,22 @@ sandbox.document.activeElement = { tagName: "TEXTAREA" };
 sandbox.reportSelection();
 if (posted.length !== 2) reportFail("a selection inside a field is the field's, not the book's");
 sandbox.document.activeElement = null;
+sandbox.window.webkit = undefined;
+
+// A tap on the colophon (the line naming the model that wrote the
+// chapter) opens the record of its writing, and is not a tap on the page:
+// the chrome stays as it was.
+sandbox.window.webkit = { messageHandlers: { bridge: { postMessage: (m) => posted.push(m) } } };
+posted.length = 0;
+const click = (hit) => {
+  const target = { closest: (sel) => sel.split(",").some((s) => s.trim() === hit) ? {} : null };
+  for (const fn of listeners.click || []) fn({ target, stopPropagation: noop });
+};
+click(".colophon");
+if (JSON.stringify(posted) !== JSON.stringify([{ type: "about" }])) reportFail(`a tap on the colophon opens the record, got ${JSON.stringify(posted)}`);
+posted.length = 0;
+click("p");
+if (JSON.stringify(posted) !== JSON.stringify([{ type: "tap" }])) reportFail(`a tap on the prose is a tap, got ${JSON.stringify(posted)}`);
 sandbox.window.webkit = undefined;
 
 // A selecting tool picked while the page's own selection is up takes

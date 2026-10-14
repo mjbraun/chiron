@@ -14,6 +14,7 @@ import (
 
 	"github.com/mjbraun/chiron/server/checkers"
 	"github.com/mjbraun/chiron/server/corpus"
+	"github.com/mjbraun/chiron/server/llm"
 	"github.com/mjbraun/chiron/server/pages"
 	"github.com/mjbraun/chiron/server/render"
 	"github.com/mjbraun/chiron/server/review"
@@ -370,10 +371,13 @@ func calibrationItems(unit *corpus.Unit, rating int) []corpus.Question {
 // must stay byte-identical to what buildChapter will produce once the
 // rating is recorded, or the cache keys will not line up.
 func (s *Server) prerenderCalibrationSets(sub *Subject, unit *corpus.Unit, checkSummary string) {
+	// What this reading asks of the model is recorded on the chapter,
+	// after whatever wrote the unit itself.
+	rec := llm.Record(s.chain)
 	sub.setStage("planning")
-	d := roles.PlanDirectives(s.chain, sub.Learner, unit, checkSummary)
+	d := roles.PlanDirectives(rec, sub.Learner, unit, checkSummary)
 	sub.setStage("writing")
-	sections, _ := roles.AuthorChapter(s.chain, unit, d, sub.Corpus)
+	sections, _ := roles.AuthorChapter(rec, unit, d, sub.Corpus)
 	var wg sync.WaitGroup
 	for rating := 1; rating <= 5; rating++ {
 		if len(unit.Questions.CalibrationSets[rating]) == 0 {
@@ -461,10 +465,13 @@ func (s *Server) buildChapter(sub *Subject, unitID, checkSummary string) (*rende
 			}
 		}
 	}
+	// What this reading asks of the model is recorded on the chapter,
+	// after whatever wrote the unit itself.
+	rec := llm.Record(s.chain)
 	sub.setStage("planning")
-	d := roles.PlanDirectives(s.chain, sub.Learner, unit, checkSummary)
+	d := roles.PlanDirectives(rec, sub.Learner, unit, checkSummary)
 	sub.setStage("writing")
-	sections, _ := roles.AuthorChapter(s.chain, unit, d, sub.Corpus)
+	sections, _ := roles.AuthorChapter(rec, unit, d, sub.Corpus)
 
 	var items []corpus.Question
 	if unit.IsCalibration() {
@@ -507,7 +514,8 @@ func (s *Server) buildChapter(sub *Subject, unitID, checkSummary string) (*rende
 		pretest = nil
 	}
 	ch, err := render.RenderChapter(ru, sections,
-		render.Directives{OpeningNoteMD: d.OpeningNoteMD, NextAction: d.NextAction},
+		render.Directives{OpeningNoteMD: d.OpeningNoteMD, NextAction: d.NextAction,
+			Generated: generated(unit, rec)},
 		pretest, items)
 	if err == nil && driveEnabled() && !unit.IsCalibration() {
 		if data, merr := json.Marshal(authorCacheEntry{Chapter: ch, Summary: d.Summary}); merr == nil {
@@ -600,7 +608,8 @@ func (s *Server) buildRepair(sub *Subject, base string) (*render.Chapter, error)
 		return nil, fmt.Errorf("unit %s: none of the missed items are in the bank", base)
 	}
 	sub.setStage("writing")
-	sections, _ := roles.AuthorRepair(s.chain, sub.Corpus, misses)
+	rec := llm.Record(s.chain)
+	sections, _ := roles.AuthorRepair(rec, sub.Corpus, misses)
 	if len(sections) == 0 {
 		return nil, fmt.Errorf("unit %s: nothing to write the repair from", base)
 	}
@@ -625,7 +634,14 @@ func (s *Server) buildRepair(sub *Subject, base string) (*render.Chapter, error)
 	return render.RenderChapter(repair, sections, render.Directives{
 		OpeningNoteMD: note,
 		NextAction:    "Work the sections, then answer the missed questions again.",
+		Generated:     generated(unit, rec),
 	}, nil, questions)
+}
+
+// generated is a chapter's provenance: the calls that wrote the unit, if
+// a model did, then the calls made for this reading of it.
+func generated(unit *corpus.Unit, rec *llm.Recorder) []llm.Call {
+	return append(append([]llm.Call(nil), unit.Provenance...), rec.Calls()...)
 }
 
 // remediationSummary is what the planner hears when the reader asks for

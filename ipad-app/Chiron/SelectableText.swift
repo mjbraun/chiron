@@ -72,6 +72,11 @@ extension Typography {
         return UIFontMetrics(forTextStyle: .body).scaledFont(for: base)
     }
 
+    /// For a prompt as it was sent: the system's monospace, scaled.
+    static func uiMono(_ size: CGFloat) -> UIFont {
+        UIFontMetrics(forTextStyle: .body).scaledFont(for: .monospacedSystemFont(ofSize: size, weight: .regular))
+    }
+
     static func uiSans(_ size: CGFloat, weight: UIFont.Weight = .regular) -> UIFont {
         let name: String
         switch weight {

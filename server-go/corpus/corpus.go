@@ -7,6 +7,7 @@
 package corpus
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -15,6 +16,8 @@ import (
 	"strings"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/mjbraun/chiron/server/llm"
 )
 
 var (
@@ -72,6 +75,10 @@ type Unit struct {
 	Depths         map[string]map[string]string // depth name -> heading -> md
 	Questions      QuestionFile
 	Misconceptions []Misconception
+	// Provenance is the record of the model calls that wrote the unit's
+	// files (provenance.json beside them), empty for a unit a person
+	// wrote. It is not part of the bank's fingerprint.
+	Provenance []llm.Call
 }
 
 func (u *Unit) ConceptIDs() []string {
@@ -184,6 +191,12 @@ func (c *Corpus) loadUnit(spec UnitSpec) (*Unit, error) {
 				return nil, err
 			}
 			u.Depths[strings.TrimSuffix(name, ".md")] = sectionsByHeading(string(body))
+		}
+	}
+
+	if praw, err := os.ReadFile(filepath.Join(udir, "provenance.json")); err == nil {
+		if err := json.Unmarshal(praw, &u.Provenance); err != nil {
+			return nil, fmt.Errorf("provenance.json: %w", err)
 		}
 	}
 

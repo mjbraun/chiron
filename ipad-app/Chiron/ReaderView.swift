@@ -546,7 +546,7 @@ struct ReaderView: UIViewRepresentable {
             switch type {
             case "ready":
                 if let ch = pendingChapter,
-                   let data = try? JSONEncoder().encode(ch),
+                   let data = try? JSONEncoder().encode(PagePayload(ch)),
                    let json = String(data: data, encoding: .utf8) {
                     let base = BookAssets.base(subject: self.session.subjectID)
                     web?.evaluateJavaScript("setScale(\(scale)); setAssetBase('\(base)'); initChapter(\(json), \(position))") { [weak self] _, _ in
@@ -582,6 +582,8 @@ struct ReaderView: UIViewRepresentable {
                 if let id = body["id"] as? String {
                     Task { @MainActor in await self.session.openMark(id) }
                 }
+            case "about":
+                Task { @MainActor in self.session.showAbout() }
             case "beat":
                 let r = BeatResponse(
                     beatId: body["beatId"] as? String ?? "",
@@ -594,6 +596,21 @@ struct ReaderView: UIViewRepresentable {
                 break
             }
         }
+    }
+}
+
+/// What the page is handed of a chapter: the parts it draws. The record
+/// of the chapter's writing stays native, since its prompts are a
+/// chapter's size again and the page shows only the colophon, which is
+/// in the HTML already.
+struct PagePayload: Encodable {
+    let title: String
+    let minutes: Int
+    let html: String
+    let beats: [JSONValue]
+
+    init(_ ch: ChapterPayload) {
+        title = ch.title; minutes = ch.minutes; html = ch.html; beats = ch.beats
     }
 }
 

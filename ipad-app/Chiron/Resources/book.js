@@ -173,9 +173,18 @@ function markAt(x, y) {
 }
 
 document.addEventListener("click", (e) => {
-  if (e.target.closest("a, button, input, textarea, select, .beat, mark.mark")) return;
+  if (e.target.closest("a, button, input, textarea, select, .beat, mark.mark, .colophon")) return;
   post({ type: "tap" });
 });
+
+/* The colophon names the model that wrote the chapter; a tap on it opens
+ * the record: the prompts, the model, the time. */
+document.addEventListener("click", (e) => {
+  if (e.target.closest(".colophon")) {
+    e.stopPropagation();
+    post({ type: "about" });
+  }
+}, true);
 
 /* ---- Marks: highlights and questions anchored to the chapter's text ----
  *

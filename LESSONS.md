@@ -311,6 +311,22 @@ symptom, the cause, what to do. Add to it in the same commit as the fix.
   writes can be wrong themselves: two of its repair tests served a
   chapter from `/chapter` before any was asked for, and never passed.
 
+- **A book's first chapter has no colophon, and that is right
+  (2026-10-14).** Every chapter the tutor writes now ends in a quiet
+  "Written by <model>" line and carries its provenance (the planner's and
+  the author's calls, prompts and times, plus the calls that wrote the
+  unit when a model did: `provenance.json` beside the unit's files) for
+  the About card; an answer carries the brief and its prompt is fetched
+  by ref from `GET /generated/{subject}/{ref}`. A test that opened a fresh
+  book and looked for the line found nothing, and it was not a bug: on a
+  cold start (no check yet, no misconceptions, no debt) the planner
+  returns default directives without a call and the author rewrites
+  nothing, so the chapter is the canon as a person wrote it. The line
+  appears from the second chapter on for the hand-written books, and from
+  the first for a generated book, whose units were written by a model.
+  A chapter stored before this change has no record either; it gains one
+  when it is next built.
+
 ## Mac side
 
 - **xcodebuild will not register a new device (2026-09-05).** With a

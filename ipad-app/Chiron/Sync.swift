@@ -13,6 +13,8 @@ protocol ChironService: AnyObject {
     func exchange(_ request: ExchangeRequest) async throws -> ExchangeResponse
     func ink(subject: String, _ submission: InkSubmission) async throws -> ExchangeResponse
     func ask(subject: String, unit: String, quote: String, question: String, history: [QA]) async throws -> AskResponse
+    /// The whole record of a model call an answer came with the brief of.
+    func generated(subject: String, ref: String) async throws -> GeneratedCall
     /// The reader thinks an item, its reference answer or its grading is
     /// wrong; `response` is what they answered, if they had.
     func flag(subject: String, unit: String, item: String, text: String, response: ItemResponse?) async throws -> FlagResponse
@@ -153,6 +155,10 @@ final class Sync: ObservableObject, ChironService {
         return try await post("/ask/\(subject)",
                               body: try JSONEncoder().encode(Body(unit: unit, quote: quote, question: question, history: history)),
                               timeout: 120)
+    }
+
+    func generated(subject: String, ref: String) async throws -> GeneratedCall {
+        try await get("/generated/\(subject)/\(ref)", timeout: 30)
     }
 
     func flag(subject: String, unit: String, item: String, text: String, response: ItemResponse?) async throws -> FlagResponse {

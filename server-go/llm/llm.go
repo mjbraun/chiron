@@ -140,6 +140,14 @@ func (c *OpenAIChain) Status() Status {
 	return Status{Connected: true, Upstream: up.Name, Model: up.Model}
 }
 
+// ModelFor names the model of the upstream a call would go to now.
+func (c *OpenAIChain) ModelFor(role string) string {
+	if up := c.healthy(); up != nil {
+		return up.Model
+	}
+	return ""
+}
+
 func (c *OpenAIChain) Structured(role, system, user string, schema map[string]any,
 	schemaName string, out any) error {
 	up := c.healthy()

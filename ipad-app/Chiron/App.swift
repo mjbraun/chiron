@@ -253,6 +253,15 @@ struct BookView: View {
                     }
                     .keyboardShortcut("c", modifiers: [.command, .shift])
                     .accessibilityLabel("Contents")
+                    // Who wrote the chapter: shown only for one a model wrote.
+                    if session.chapterProvenance != nil {
+                        Button { session.showAbout() } label: {
+                            Label("About this chapter", systemImage: "info.circle")
+                        }
+                        .keyboardShortcut("i", modifiers: [.command, .shift])
+                        .accessibilityLabel("About this chapter")
+                        .accessibilityHint("The model that wrote it, when, and the prompt")
+                    }
                     RequestButton()
                     ShellButton()
                 }
@@ -311,6 +320,11 @@ struct BookView: View {
                 }
             }
             .toolbar(chromeHidden ? .hidden : .visible, for: .navigationBar, .bottomBar)
+            .sheet(item: $session.about) { p in
+                ProvenanceCard(provenance: p, fetch: { subject, ref in
+                    try await library.service.generated(subject: subject, ref: ref)
+                })
+            }
         }
         .animation(.easeInOut(duration: 0.2), value: chromeHidden)
     }
