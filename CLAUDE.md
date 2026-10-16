@@ -45,7 +45,7 @@ You are on the machine that serves the book. Facts that matter:
   or `app-build`), worktree gone; the next request that gets through
   that step carries every merged one to `ready`. When Claude Code would be guessing it ends
   with `QUESTION: ...`; the request waits (status `waiting`, the
-  wrench shows a badge), Matt answers in the requests card (`POST
+  wrench fills orange), Matt answers in the requests card (`POST
   /dev/requests/{id}/answer`), and the request is queued again into the
   same worktree with the questions and answers in its brief. While it works a request, the agent holds
   the sprite awake with a runtime task (`sprite-env curl /v1/tasks`

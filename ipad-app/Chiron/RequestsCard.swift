@@ -229,22 +229,15 @@ struct RequestButton: View {
     @EnvironmentObject var library: Library
 
     var body: some View {
-        Button { library.requestsShown = true } label: {
-            Label("Request a change", systemImage: "wrench.and.screwdriver")
-        }
         // A request the agent stopped on waits on the reader: the wrench
-        // says how many.
-        .overlay(alignment: .topTrailing) {
-            if library.waitingOnReader > 0 {
-                Text("\(library.waitingOnReader)")
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 5)
-                    .background(Color.orange, in: .capsule)
-                    .offset(x: 8, y: -6)
-                    .allowsHitTesting(false)
-            }
+        // fills and turns orange. A toolbar button must stay a plain
+        // label: anything laid over it (a count badge, once) leaves the
+        // toolbar unable to find the button, and a tap does nothing.
+        let waiting = library.waitingOnReader > 0
+        Button { library.requestsShown = true } label: {
+            Label("Request a change", systemImage: waiting ? "wrench.and.screwdriver.fill" : "wrench.and.screwdriver")
         }
+        .tint(waiting ? .orange : nil)
         .keyboardShortcut("r", modifiers: [.command, .shift])
         .accessibilityValue(library.waitingOnReader > 0 ? "\(library.waitingOnReader) waiting on your answer" : "")
         .accessibilityHint("Ask the agent on the sprite to change the app")

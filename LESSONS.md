@@ -14,6 +14,17 @@ symptom, the cause, what to do. Add to it in the same commit as the fix.
   `restoreBeat` in book.js shows each answered beat as it was left
   without posting it again. Anything the page shows that the reader did
   has to be replayed into it on every load; the page keeps nothing.
+- **The wrench stopped opening the requests card, on every device at
+  once (2026-10-15).** Its button had a count badge laid over it with
+  `.overlay`, drawn only while a request waits on the reader. The first
+  time a request waited for days, the iOS 26 toolbar stopped treating
+  the button as a button: no badge drawn, no tap taken, and XCUITest
+  could not find it by its label. Set through the harness the card
+  opened fine, which is what separated the sheet from the tap. A
+  toolbar button stays a plain Label; state goes into the symbol and
+  its tint (`wrench.and.screwdriver.fill`, orange), the count into
+  `accessibilityValue`. `RequestButtonUITests` seeds a waiting request
+  and taps.
 - **"Two copies" kept coming back after "Keep this device's copy"
   (2026-10-12).** The server was being redeployed under the reader and
   the gate answered 502 while it came up, so a put of the unit's marks
