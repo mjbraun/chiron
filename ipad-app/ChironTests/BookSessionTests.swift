@@ -1110,6 +1110,33 @@ final class BookSessionTests: XCTestCase {
         XCTAssertNotNil(s.asking?.error)
         XCTAssertNil(s.asking?.mark.answer)
     }
+
+    // MARK: - beats answered before the reader left
+
+    /// A beat answered in a chapter is still answered when the chapter is
+    /// opened again: the session keeps every response on disk, and the page
+    /// is handed them with the chapter so it can show each beat as it was
+    /// left. They were kept before, but never shown again (2026-10-16).
+    func testTheBeatsAnsweredComeBackWithTheChapter() throws {
+        let s = session()
+        s.setChapterForTesting(chapterPayload("u1", "Tokens"))
+        s.recordBeat(BeatResponse(beatId: "u1-b1", response: "overflow", selfVerdict: nil, mechanicalVerdict: "fail", selectedIndex: 1))
+        s.recordBeat(BeatResponse(beatId: "u1-b2", response: "42", selfVerdict: nil, mechanicalVerdict: "pass", selectedIndex: nil))
+        // Answered again: the later answer replaces the earlier.
+        s.recordBeat(BeatResponse(beatId: "u1-b1", response: "scale", selfVerdict: nil, mechanicalVerdict: "pass", selectedIndex: 0))
+
+        let again = session()
+        again.restoreForTesting()
+        XCTAssertEqual(again.beatResponses.map(\.beatId), ["u1-b2", "u1-b1"])
+        XCTAssertEqual(again.beatResponses.last?.selectedIndex, 0)
+
+        let page = try JSONSerialization.jsonObject(with: JSONEncoder().encode(PagePayload(again.chapter!, responses: again.beatResponses))) as? [String: Any]
+        let responses = page?["responses"] as? [[String: Any]]
+        XCTAssertEqual(responses?.count, 2)
+        XCTAssertEqual(responses?.first?["beat_id"] as? String, "u1-b2")
+        XCTAssertEqual(responses?.first?["mechanical_verdict"] as? String, "pass")
+        XCTAssertEqual(responses?.last?["selected_index"] as? Int, 0)
+    }
 }
 
 /// A device model that answers whatever it is asked.
@@ -1272,31 +1299,5 @@ final class FlagTests: XCTestCase {
             XCTFail("a failed flag did not throw")
         } catch {}
         XCTAssertTrue(s.flagged.isEmpty)
-    }
-
-    // MARK: - beats answered before the reader left
-
-    /// A beat answered in a chapter is still answered when the chapter is
-    /// opened again: the session keeps every response on disk, and the page
-    /// is handed them with the chapter so it can show each beat as it was
-    /// left. They were kept before, but never shown again (2026-10-16).
-    func testTheBeatsAnsweredComeBackWithTheChapter() throws {
-        let s = session()
-        s.chapter = chapterPayload("u1", "Tokens")
-        s.recordBeat(BeatResponse(beatId: "u1-b1", response: "overflow", selfVerdict: nil, mechanicalVerdict: "fail", selectedIndex: 1))
-        s.recordBeat(BeatResponse(beatId: "u1-b2", response: "42", selfVerdict: nil, mechanicalVerdict: "pass", selectedIndex: nil))
-        // Answered again: the later answer replaces the earlier.
-        s.recordBeat(BeatResponse(beatId: "u1-b1", response: "scale", selfVerdict: nil, mechanicalVerdict: "pass", selectedIndex: 0))
-
-        let again = session()
-        XCTAssertEqual(again.beatResponses.map(\.beatId), ["u1-b2", "u1-b1"])
-        XCTAssertEqual(again.beatResponses.last?.selectedIndex, 0)
-
-        let page = try JSONSerialization.jsonObject(with: JSONEncoder().encode(PagePayload(again.chapter!, responses: again.beatResponses))) as? [String: Any]
-        let responses = page?["responses"] as? [[String: Any]]
-        XCTAssertEqual(responses?.count, 2)
-        XCTAssertEqual(responses?.first?["beat_id"] as? String, "u1-b2")
-        XCTAssertEqual(responses?.first?["mechanical_verdict"] as? String, "pass")
-        XCTAssertEqual(responses?.last?["selected_index"] as? Int, 0)
     }
 }
