@@ -57,7 +57,10 @@ final class BookSession: ObservableObject {
     /// Seconds between /chapter polls while the server writes.
     var pollInterval: TimeInterval = 2
 
-    private var beatResponses: [BeatResponse] = []
+    /// What the reader answered in the chapter so far, kept on disk and
+    /// handed to the page with the chapter so each beat comes back as it
+    /// was left; the next exchange sends them for grading.
+    private(set) var beatResponses: [BeatResponse] = []
     private var chapterOpenedAt: Date?
     private var pretestDone = false
     /// Where the reader left each chapter: a fraction of its scroll, 0 at

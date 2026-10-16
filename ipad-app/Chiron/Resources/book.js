@@ -45,9 +45,15 @@ function initChapter(payload, position) {
     `<div class="chapter-meta">~${payload.minutes} min${(payload.beats || []).length ? " · work every beat before its reveal" : ""}</div>` +
     payload.html;
 
+  // What the reader answered before leaving this chapter, kept by the
+  // native side: each beat comes back as it was left, not blank.
+  const responses = {};
+  for (const r of payload.responses || []) responses[r.beat_id] = r;
   for (const beat of payload.beats) {
     const holder = root.querySelector(`.beat[data-beat-id="${beat.id}"]`);
-    if (holder) renderBeat(holder, beat);
+    if (!holder) continue;
+    renderBeat(holder, beat);
+    if (responses[beat.id]) restoreBeat(holder, beat, responses[beat.id]);
   }
   resolveAssets(root);
   renderMathIn(root);
@@ -442,35 +448,70 @@ function renderBeat(holder, beat) {
   btn.addEventListener("click", () => {
     const response = input.value.trim();
     if (!response) { input.focus(); return; }
-    input.disabled = true;
-    btn.remove();
-    const reveal = holder.querySelector(".reveal");
-    reveal.hidden = false;
-
-    if (mechanical) {
-      const ok = gradeMechanical(beat.check, beat.answer, response);
-      reveal.innerHTML =
-        `<div class="${ok ? "verdict-ok" : "verdict-bad"}">${ok ? "Correct." : "Not quite."}</div>` +
-        `<p><strong>Answer:</strong> ${mdLite(String(beat.answer))}</p>`;
-      finishBeat(holder, beat, response, { mechanicalVerdict: ok ? "pass" : "fail" });
-    } else {
-      reveal.innerHTML =
-        `<p><strong>Reference:</strong></p>${mdLite(beat.answer || "")}` +
-        (beat.rubric ? `<p><strong>What a full answer contains:</strong></p>${mdLite(beat.rubric)}` : "") +
-        `<p>Honest self-check - did you have it?</p>
-         <button class="secondary" data-v="pass">I had it</button>
-         <button class="secondary" data-v="partial">Partially</button>
-         <button class="secondary" data-v="fail">I did not</button>`;
-      reveal.querySelectorAll("button").forEach((b) =>
-        b.addEventListener("click", () => {
-          reveal.querySelectorAll("button").forEach((x) => (x.disabled = true));
-          b.style.opacity = "1";
-          finishBeat(holder, beat, response, { selfVerdict: b.dataset.v });
-        })
-      );
-    }
-    renderMathIn(reveal);
+    revealResponse(holder, beat, response, null);
   });
+}
+
+/* The reveal of a written beat: committed just now (no verdict yet; a
+ * mechanical beat grades, an llm one asks for the self-check) or restored
+ * with the self-check the reader gave. */
+function revealResponse(holder, beat, response, selfVerdict) {
+  const mechanical = beat.check && beat.check !== "llm";
+  const input = holder.querySelector("input, textarea");
+  const btn = holder.querySelector("button.commit");
+  if (input) { input.value = response; input.disabled = true; }
+  if (btn) btn.remove();
+  const reveal = holder.querySelector(".reveal");
+  reveal.hidden = false;
+
+  if (mechanical) {
+    const ok = gradeMechanical(beat.check, beat.answer, response);
+    reveal.innerHTML =
+      `<div class="${ok ? "verdict-ok" : "verdict-bad"}">${ok ? "Correct." : "Not quite."}</div>` +
+      `<p><strong>Answer:</strong> ${mdLite(String(beat.answer))}</p>`;
+    renderMathIn(reveal);
+    return { mechanicalVerdict: ok ? "pass" : "fail" };
+  }
+  const choice = (v, label) =>
+    `<button class="secondary" data-v="${v}"${selfVerdict ? " disabled" : ""}${selfVerdict === v ? ' style="opacity: 1"' : ""}>${label}</button>`;
+  reveal.innerHTML =
+    `<p><strong>Reference:</strong></p>${mdLite(beat.answer || "")}` +
+    (beat.rubric ? `<p><strong>What a full answer contains:</strong></p>${mdLite(beat.rubric)}` : "") +
+    `<p>Honest self-check - did you have it?</p>
+       ${choice("pass", "I had it")}
+       ${choice("partial", "Partially")}
+       ${choice("fail", "I did not")}`;
+  if (!selfVerdict) {
+    reveal.querySelectorAll("button").forEach((b) =>
+      b.addEventListener("click", () => {
+        reveal.querySelectorAll("button").forEach((x) => (x.disabled = true));
+        b.style.opacity = "1";
+        finishBeat(holder, beat, response, { selfVerdict: b.dataset.v });
+      })
+    );
+  }
+  renderMathIn(reveal);
+  return selfVerdict ? { selfVerdict } : null;
+}
+
+/* A beat answered before the reader left the chapter, shown as it was
+ * left: the option chosen with its reveal, or the answer written with its
+ * verdict. Nothing is posted; the native side has this answer already.
+ * A response that fits no option (the beat was rewritten under it) leaves
+ * the beat open. */
+function restoreBeat(holder, beat, r) {
+  if (beat.options && beat.options.length) {
+    let i = typeof r.selected_index === "number" ? r.selected_index : -1;
+    if (i < 0 || i >= beat.options.length) i = beat.options.findIndex((o) => o.text === r.response);
+    if (i < 0) return;
+    revealChoice(holder, beat, i);
+  } else {
+    if (!r.response) return;
+    const done = revealResponse(holder, beat, r.response, r.self_verdict || null);
+    if (!done) return;
+  }
+  holder.classList.add("done");
+  answered[beat.id] = true;
 }
 
 /* A beat answered by a tap: one option is right, every other one carries
@@ -488,19 +529,26 @@ function renderChoiceBeat(holder, beat) {
   holder.querySelectorAll("button.option").forEach((b) =>
     b.addEventListener("click", () => {
       const i = Number(b.dataset.i);
-      holder.querySelectorAll("button.option").forEach((x) => (x.disabled = true));
-      b.classList.add("chosen");
-      const g = gradeChoice(beat.options, i);
-      const reveal = holder.querySelector(".reveal");
-      reveal.hidden = false;
-      reveal.innerHTML =
-        `<div class="${g.correct ? "verdict-ok" : "verdict-bad"}">${g.correct ? "Correct." : "Not quite."}</div>` +
-        (g.explain ? `<p>${mdLite(g.explain)}</p>` : "") +
-        (g.correct ? "" : `<p><strong>Answer:</strong> ${mdLite(g.answer)}</p>`);
-      renderMathIn(reveal);
+      const g = revealChoice(holder, beat, i);
       finishBeat(holder, beat, beat.options[i].text, { selectedIndex: i, mechanicalVerdict: g.correct ? "pass" : "fail" });
     })
   );
+}
+
+/* The chosen option marked, the others closed, and the reveal for it. */
+function revealChoice(holder, beat, i) {
+  holder.querySelectorAll("button.option").forEach((x) => (x.disabled = true));
+  const chosen = holder.querySelector(`button.option[data-i="${i}"]`);
+  if (chosen) chosen.classList.add("chosen");
+  const g = gradeChoice(beat.options, i);
+  const reveal = holder.querySelector(".reveal");
+  reveal.hidden = false;
+  reveal.innerHTML =
+    `<div class="${g.correct ? "verdict-ok" : "verdict-bad"}">${g.correct ? "Correct." : "Not quite."}</div>` +
+    (g.explain ? `<p>${mdLite(g.explain)}</p>` : "") +
+    (g.correct ? "" : `<p><strong>Answer:</strong> ${mdLite(g.answer)}</p>`);
+  renderMathIn(reveal);
+  return g;
 }
 
 /* Mirrors checkers.CheckMCQ: the chosen option's own verdict and reveal. */

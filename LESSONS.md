@@ -5,6 +5,15 @@ symptom, the cause, what to do. Add to it in the same commit as the fix.
 
 ## iPad app
 
+- **A chapter opened again showed every beat blank (2026-10-16).** The
+  page renders each beat fresh in `initChapter`, and the answers it had
+  posted over the bridge lived only in the session's `beats.json`, which
+  went to the server at the next exchange and nowhere else; leaving for
+  the shelf and coming back looked like the answers were lost, though
+  they were not. The page's payload now carries `responses`, and
+  `restoreBeat` in book.js shows each answered beat as it was left
+  without posting it again. Anything the page shows that the reader did
+  has to be replayed into it on every load; the page keeps nothing.
 - **"Two copies" kept coming back after "Keep this device's copy"
   (2026-10-12).** The server was being redeployed under the reader and
   the gate answered 502 while it came up, so a put of the unit's marks

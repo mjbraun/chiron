@@ -546,7 +546,7 @@ struct ReaderView: UIViewRepresentable {
             switch type {
             case "ready":
                 if let ch = pendingChapter,
-                   let data = try? JSONEncoder().encode(PagePayload(ch)),
+                   let data = try? JSONEncoder().encode(PagePayload(ch, responses: session.beatResponses)),
                    let json = String(data: data, encoding: .utf8) {
                     let base = BookAssets.base(subject: self.session.subjectID)
                     web?.evaluateJavaScript("setScale(\(scale)); setAssetBase('\(base)'); initChapter(\(json), \(position))") { [weak self] _, _ in
@@ -608,9 +608,12 @@ struct PagePayload: Encodable {
     let minutes: Int
     let html: String
     let beats: [JSONValue]
+    /// The beats answered already, so the page shows them answered.
+    let responses: [BeatResponse]
 
-    init(_ ch: ChapterPayload) {
+    init(_ ch: ChapterPayload, responses: [BeatResponse] = []) {
         title = ch.title; minutes = ch.minutes; html = ch.html; beats = ch.beats
+        self.responses = responses
     }
 }
 

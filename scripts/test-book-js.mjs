@@ -357,7 +357,86 @@ if (cleared !== 1) takeFail("a field's selection is left alone");
 sandbox.document.activeElement = null;
 const takeCases = 9;
 
-const total = cases.length + choiceCases.length + positionCases.length + 1 + restoreCases.length + 1 + selectionCases + mathCases.length + 3 + 2 + 4 + takeCases;
-failed += selectionFailed + reportFailed + takeFailed + mathFailed + renderFailed + layoutFailed;
+
+// A beat answered before the reader left the chapter comes back answered:
+// the native side keeps every response and hands them to the page with
+// the chapter, and the page shows each beat as it was left (the option
+// chosen and its reveal, the answer typed and its verdict) without
+// posting the answer over the bridge a second time.
+const fakeEl = (extra = {}) => Object.assign({
+  hidden: true, innerHTML: "", disabled: false, value: "", style: {}, dataset: {}, childNodes: [],
+  classList: { list: [], add(c) { this.list.push(c); }, contains(c) { return this.list.includes(c); } },
+  addEventListener: noop, focus: noop, remove() { this.removed = true; },
+}, extra);
+const fakeHolder = (beat) => {
+  const options = (beat.options || []).map((_, i) => fakeEl({ dataset: { i: String(i) } }));
+  const reveal = fakeEl(), input = fakeEl(), commit = fakeEl();
+  const holder = fakeEl({
+    querySelector: (sel) => {
+      const m = /button\.option\[data-i="(\d+)"\]/.exec(sel);
+      if (m) return options[Number(m[1])] || null;
+      if (sel === ".reveal") return reveal;
+      if (sel === "input, textarea") return input;
+      if (sel === "button.commit") return commit;
+      return null;
+    },
+    querySelectorAll: (sel) => sel === "button.option" ? options : [],
+  });
+  return { holder, options, reveal, input, commit };
+};
+let restoreFailed = 0;
+const restoreFail = (msg) => { restoreFailed++; console.log(`FAIL restore beat: ${msg}`); };
+sandbox.window.webkit = { messageHandlers: { bridge: { postMessage: (m) => posted.push(m) } } };
+posted.length = 0;
+const choiceBeat = { id: "u1-b1", type: "predict", prompt: "Which?", options };
+const choice = fakeHolder(choiceBeat);
+sandbox.renderBeat(choice.holder, choiceBeat);
+sandbox.restoreBeat(choice.holder, choiceBeat, { beat_id: "u1-b1", response: "overflow", selected_index: 1, mechanical_verdict: "fail" });
+if (!choice.options[1].classList.contains("chosen")) restoreFail("the option chosen is marked chosen");
+if (!choice.options.every((o) => o.disabled)) restoreFail("an answered choice takes no second tap");
+if (choice.reveal.hidden || !choice.reveal.innerHTML.includes("Not quite.") || !choice.reveal.innerHTML.includes("Numerics, not gradients."))
+  restoreFail(`the reveal adjudicates the option chosen, got ${JSON.stringify(choice.reveal.innerHTML)}`);
+if (!choice.holder.classList.contains("done")) restoreFail("a restored beat is done");
+const computeBeat = { id: "u1-b2", type: "compute", prompt: "6 x 7?", check: "numeric(0.5)", answer: "42" };
+const compute = fakeHolder(computeBeat);
+sandbox.renderBeat(compute.holder, computeBeat);
+sandbox.restoreBeat(compute.holder, computeBeat, { beat_id: "u1-b2", response: "42", mechanical_verdict: "pass" });
+if (compute.input.value !== "42" || !compute.input.disabled) restoreFail(`the answer typed is shown and kept, got ${JSON.stringify(compute.input.value)}`);
+if (!compute.commit.removed) restoreFail("an answered beat has no commit button");
+if (compute.reveal.hidden || !compute.reveal.innerHTML.includes("Correct.")) restoreFail(`the verdict is shown again, got ${JSON.stringify(compute.reveal.innerHTML)}`);
+const explainBeat = { id: "u1-b3", type: "self-explain", prompt: "Why?", check: "llm", answer: "Because.", rubric: "Says because." };
+const explain = fakeHolder(explainBeat);
+sandbox.renderBeat(explain.holder, explainBeat);
+sandbox.restoreBeat(explain.holder, explainBeat, { beat_id: "u1-b3", response: "since", self_verdict: "partial" });
+if (explain.reveal.hidden || !explain.reveal.innerHTML.includes("Reference:")) restoreFail("the reference is shown again");
+if (!explain.reveal.innerHTML.includes('data-v="partial" disabled style="opacity: 1"') || explain.reveal.innerHTML.includes('data-v="pass" disabled style')
+    || !explain.reveal.innerHTML.includes('data-v="pass" disabled'))
+  restoreFail(`the self-check given is the one marked, all three closed, got ${JSON.stringify(explain.reveal.innerHTML)}`);
+if (posted.length !== 0) restoreFail(`restoring posts nothing over the bridge, got ${JSON.stringify(posted)}`);
+// A response the chapter no longer has a beat for (the beat was
+// rewritten) is left alone; one with an index past the options is too.
+const stale = fakeHolder(choiceBeat);
+sandbox.renderBeat(stale.holder, choiceBeat);
+sandbox.restoreBeat(stale.holder, choiceBeat, { beat_id: "u1-b1", response: "gone", selected_index: 7 });
+if (stale.options.some((o) => o.disabled) || !stale.reveal.hidden) restoreFail("a response that matches no option leaves the beat open");
+// The chapter's payload carries the responses, and initChapter replays them.
+const holders = {};
+for (const b of [choiceBeat, computeBeat]) holders[b.id] = fakeHolder(b);
+sandbox.document.getElementById = (id) => id === "chapter" ? {
+  innerHTML: "", childNodes: [],
+  querySelector: (sel) => { const m = /data-beat-id="([^"]+)"/.exec(sel); return m && holders[m[1]] ? holders[m[1]].holder : null; },
+  querySelectorAll: () => [],
+} : null;
+sandbox.initChapter({ title: "T", minutes: 1, html: "", beats: [choiceBeat, computeBeat],
+  responses: [{ beat_id: "u1-b2", response: "41", mechanical_verdict: "fail" }] }, 0);
+if (!holders["u1-b2"].holder.classList.contains("done") || !holders["u1-b2"].reveal.innerHTML.includes("Not quite."))
+  restoreFail("a chapter opened again shows the beats answered before");
+if (holders["u1-b1"].holder.classList.contains("done")) restoreFail("a beat not answered is still open");
+if (posted.some((m) => m.type === "beat")) restoreFail("opening a chapter again posts no answers");
+sandbox.window.webkit = undefined;
+const restoreCount = 12;
+
+const total = cases.length + choiceCases.length + positionCases.length + 1 + restoreCases.length + 1 + selectionCases + mathCases.length + 3 + 2 + 4 + takeCases + restoreCount;
+failed += selectionFailed + reportFailed + takeFailed + mathFailed + renderFailed + layoutFailed + restoreFailed;
 console.log(`${total - failed}/${total} book.js cases pass`);
 process.exit(failed ? 1 : 0);
