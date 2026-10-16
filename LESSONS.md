@@ -349,6 +349,15 @@ symptom, the cause, what to do. Add to it in the same commit as the fix.
 
 ## Mac side
 
+- **"cannot execute tool 'metal' due to missing Metal Toolchain" with
+  the toolchain installed (2026-10-16).** SwiftTerm 1.20 ships a Metal
+  shader, so every clean build of the app compiles one. Xcode 26 keeps
+  the Metal toolchain in a cryptex mounted on demand; now and then the
+  mount is not there when `metal` is called and the build fails with
+  that message, on the device and Mac builds together. `xcodebuild
+  -showComponent MetalToolchain -json` says "installed" and brings the
+  mount up; the next build goes through. Do not download the component
+  again; check it and retry.
 - **xcodebuild will not register a new device (2026-09-05).** With a
   phone plugged in for the first time it fails with "No Accounts: Add a
   new account in Accounts settings" and "provisioning profile doesn't
